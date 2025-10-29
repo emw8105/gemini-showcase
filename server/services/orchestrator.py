@@ -12,10 +12,10 @@ Manages the flow from video selection to audio streaming:
 import asyncio
 from typing import Dict, Optional
 from datetime import datetime
-from .lyria_pool import LyriaConnectionPool, LyriaConnection
-from .composition_context import CompositionContext
-from .gemini_analyzer import GeminiAnalyzer
-from .frame_extractor import FrameExtractor
+from services.lyria_pool import LyriaConnectionPool, LyriaConnection
+from services.composition_context import CompositionContext
+from services.gemini_analyzer import GeminiAnalyzer
+from services.frame_extractor import FrameExtractor
 
 
 class MusicGenerationOrchestrator:

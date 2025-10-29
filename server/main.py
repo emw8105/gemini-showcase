@@ -16,7 +16,7 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
-from .services.orchestrator import MusicGenerationOrchestrator
+from services.orchestrator import MusicGenerationOrchestrator
 
 # Load environment variables
 load_dotenv()

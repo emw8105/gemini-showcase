@@ -11,7 +11,8 @@ from typing import Dict, Tuple
 from google.cloud import aiplatform
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part, Image
-from .composition_context import CompositionContext
+import textwrap
+from composition_context import CompositionContext
 
 
 class GeminiAnalyzer:
@@ -29,10 +30,45 @@ class GeminiAnalyzer:
         self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
         self.temperature = temperature or float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
         
-        # Initialize Vertex AI
-        vertexai.init(project=self.project_id, location=self.location)
+        # Check if Google Cloud project is configured
+        if not self.project_id:
+            print("\n" + "=" * 60)
+            print("WARNING: Google Cloud project not configured")
+            print("=" * 60)
+            print("GeminiAnalyzer requires a Google Cloud project for video")
+            print("frame analysis. The server will continue without it.")
+            print("\nTo enable, add to .env file:")
+            print("   GOOGLE_CLOUD_PROJECT=your-project-id")
+            print("\nOptionally, for service account auth:")
+            print("   GOOGLE_APPLICATION_CREDENTIALS=path/to/key.json")
+            print("=" * 60 + "\n")
+            self.model = None
+            return
         
-        self.model = GenerativeModel(self.model_name)
+        # Initialize Vertex AI
+        # Will use Application Default Credentials (gcloud auth) or service account
+        try:
+            vertexai.init(project=self.project_id, location=self.location)
+            self.model = GenerativeModel(self.model_name)
+            
+            credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if credentials_path:
+                print(f"[GeminiAnalyzer] ✓ Initialized with service account auth")
+            else:
+                print(f"[GeminiAnalyzer] ✓ Initialized with Application Default Credentials (gcloud)")
+            print(f"[GeminiAnalyzer]   Project: {self.project_id}, Model: {self.model_name}")
+            
+        except Exception as e:
+            print("\n" + "=" * 60)
+            print("ERROR: Failed to initialize Vertex AI")
+            print("=" * 60)
+            print(f"Error: {str(e)}")
+            print("\nPossible solutions:")
+            print("1. Run: gcloud auth application-default login")
+            print("2. Or set GOOGLE_APPLICATION_CREDENTIALS in .env")
+            print("3. Ensure Vertex AI API is enabled in your project")
+            print("=" * 60 + "\n")
+            self.model = None
     
     async def analyze_frame(
         self, 
@@ -40,6 +76,13 @@ class GeminiAnalyzer:
         composition_context: CompositionContext
     ) -> Dict[str, str]:
         """Analyze a single frame for initial composition."""
+        if not self.model:
+            raise RuntimeError(
+                "GeminiAnalyzer is not initialized. Please configure Google Cloud credentials in .env:\n"
+                "  GOOGLE_CLOUD_PROJECT=your-project-id\n"
+                "  GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json"
+            )
+        
         try:
             # Describe the image first
             description = await self.describe_image(frame_bytes)
@@ -108,23 +151,25 @@ class GeminiAnalyzer:
             old_image = Part.from_data(data=old_frame_bytes, mime_type="image/png")
             new_image = Part.from_data(data=new_frame_bytes, mime_type="image/png")
             
-            prompt = f"""You are analyzing two consecutive frames from a video to determine if the music should change.
+            prompt = textwrap.dedent(f"""\
+                You are analyzing two consecutive frames from a video to determine if the music should change.
 
-Video title: "{composition_context.video_title}"
+                Video title: "{composition_context.video_title}"
 
-Current musical state:
-- Mood: {composition_context.current_state['mood']}
-- Tempo: {composition_context.current_state['tempo']}
-- Intensity: {composition_context.current_state['intensity']}
+                Current musical state:
+                - Mood: {composition_context.current_state['mood']}
+                - Tempo: {composition_context.current_state['tempo']}
+                - Intensity: {composition_context.current_state['intensity']}
 
-Compare these two frames and answer:
-1. What changed between them? (scene, action, mood)
-2. Should the music change? (yes/no)
-3. If yes, what specific composition updates are needed? (2-3 sentences max)
+                Compare these two frames and answer:
+                1. What changed between them? (scene, action, mood)
+                2. Should the music change? (yes/no)
+                3. If yes, what specific composition updates are needed? (2–3 sentences max)
 
-If the change is minor or the music is already appropriate, say "no change needed".
+                If the change is minor or the music is already appropriate, say "no change needed".
 
-Analysis:"""
+                Analysis:
+            """)
 
             response = self.model.generate_content(
                 [old_image, "Frame 1 (previous)", new_image, "Frame 2 (current)", prompt],

@@ -25,3 +25,4 @@ scikit-image==0.22.0
 # Utilities
 aiohttp==3.9.3
 asyncio==3.4.3
+textwrap
