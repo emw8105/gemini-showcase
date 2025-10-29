@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Lyria Showcase - Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+
+        .status.connected {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+
+        .status.playing {
+            background: #eef;
+            color: #33c;
+            border: 1px solid #ccf;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e0e0e0;
+        }
+
+        .btn-danger {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #cc0000;
+        }
+
+        .log {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .log-entry.info {
+            color: #0066cc;
+        }
+
+        .log-entry.success {
+            color: #009900;
+            font-weight: bold;
+        }
+
+        .log-entry.error {
+            color: #cc0000;
+            font-weight: bold;
+        }
+
+        .log-entry.audio {
+            color: #9900cc;
+        }
+
+        .audio-viz {
+            background: #000;
+            border-radius: 8px;
+            height: 100px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .audio-viz canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .session-info {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Gemini Lyria Showcase</h1>
+        <p class="subtitle">Live music generation from video content</p>
+
+        <div id="status" class="status disconnected">
+            ⚫ Disconnected from server
+        </div>
+
+        <div class="session-info" id="sessionInfo">
+            Session ID: Not connected
+        </div>
+
+        <div class="input-group">
+            <label for="videoUrl">YouTube Video URL</label>
+            <input 
+                type="text" 
+                id="videoUrl" 
+                placeholder="https://www.youtube.com/watch?v=..."
+                value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            />
+        </div>
+
+        <div class="button-group">
+            <button id="connectBtn" class="btn-primary" onclick="connect()">
+                Connect to Server
+            </button>
+            <button id="startBtn" class="btn-primary" onclick="startMusic()" disabled>
+                Start Music
+            </button>
+            <button id="stopBtn" class="btn-danger" onclick="stopMusic()" disabled>
+                Stop
+            </button>
+        </div>
+
+        <div class="input-group">
+            <label for="userPrompt">User Prompt (optional)</label>
+            <input 
+                type="text" 
+                id="userPrompt" 
+                placeholder="e.g., make it more epic, add heavy drums..."
+            />
+        </div>
+
+        <div class="button-group">
+            <button id="promptBtn" class="btn-secondary" onclick="sendPrompt()" disabled>
+                Send Prompt
+            </button>
+        </div>
+
+        <div class="audio-viz" id="audioViz">
+            <canvas id="visualizer"></canvas>
+        </div>
+
+        <div class="log" id="log">
+            <div class="log-entry info">Ready to connect...</div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Audio Chunks</div>
+                <div class="stat-value" id="chunkCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Data Received</div>
+                <div class="stat-value" id="dataReceived">0 KB</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let ws = null;
+        let sessionId = null;
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlaying = false;
+        let chunkCount = 0;
+        let totalBytes = 0;
+
+        // UI Elements
+        const statusEl = document.getElementById('status');
+        const sessionInfoEl = document.getElementById('sessionInfo');
+        const logEl = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const promptBtn = document.getElementById('promptBtn');
+        const chunkCountEl = document.getElementById('chunkCount');
+        const dataReceivedEl = document.getElementById('dataReceived');
+
+        // Audio visualization
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+
+        // Logging
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStatus(text, state) {
+            statusEl.textContent = text;
+            statusEl.className = `status ${state}`;
+        }
+
+        // WebSocket connection
+        async function connect() {
+            try {
+                log('Connecting to WebSocket server...', 'info');
+                updateStatus('⚡ Connecting...', 'disconnected');
+
+                ws = new WebSocket('ws://localhost:3001/ws');
+
+                ws.onopen = () => {
+                    log('WebSocket connected!', 'success');
+                    updateStatus('✅ Connected to server', 'connected');
+                    connectBtn.disabled = true;
+                    startBtn.disabled = false;
+                };
+
+                ws.onmessage = async (event) => {
+                    if (event.data instanceof Blob) {
+                        // Audio data
+                        handleAudioData(event.data);
+                    } else {
+                        // JSON message
+                        const data = JSON.parse(event.data);
+                        handleJsonMessage(data);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    log(`WebSocket error: ${error}`, 'error');
+                    updateStatus('❌ Connection error', 'disconnected');
+                };
+
+                ws.onclose = () => {
+                    log('WebSocket disconnected', 'info');
+                    updateStatus('⚫ Disconnected from server', 'disconnected');
+                    connectBtn.disabled = false;
+                    startBtn.disabled = true;
+                    stopBtn.disabled = true;
+                    promptBtn.disabled = true;
+                    sessionId = null;
+                    sessionInfoEl.textContent = 'Session ID: Not connected';
+                };
+
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                updateStatus('❌ Connection failed', 'disconnected');
+            }
+        }
+
+        function handleJsonMessage(data) {
+            log(`Received: ${data.type}`, 'info');
+
+            if (data.type === 'session') {
+                sessionId = data.session_id;
+                sessionInfoEl.textContent = `Session ID: ${sessionId}`;
+                log(`Session ID: ${sessionId}`, 'success');
+            } else if (data.type === 'pong') {
+                // Heartbeat response
+            } else if (data.type === 'prompt_received') {
+                log(`Prompt applied: "${data.prompt}"`, 'success');
+            }
+        }
+
+        async function handleAudioData(blob) {
+            chunkCount++;
+            totalBytes += blob.size;
+            
+            chunkCountEl.textContent = chunkCount;
+            dataReceivedEl.textContent = `${(totalBytes / 1024).toFixed(1)} KB`;
+
+            log(`Audio chunk received: ${blob.size} bytes`, 'audio');
+
+            // Initialize audio context if needed
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                log('Audio context initialized', 'success');
+            }
+
+            // Decode and play audio
+            try {
+                const arrayBuffer = await blob.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+
+                // Simple visualization
+                visualizeAudio(audioBuffer);
+                
+            } catch (error) {
+                log(`Audio decode error: ${error.message}`, 'error');
+            }
+        }
+
+        function visualizeAudio(audioBuffer) {
+            const data = audioBuffer.getChannelData(0);
+            const step = Math.ceil(data.length / canvas.width);
+            const amp = canvas.height / 2;
+
+            canvasCtx.fillStyle = '#000';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.strokeStyle = '#667eea';
+            canvasCtx.lineWidth = 2;
+            canvasCtx.beginPath();
+
+            for (let i = 0; i < canvas.width; i++) {
+                const min = Math.min(...data.slice(i * step, (i + 1) * step));
+                const max = Math.max(...data.slice(i * step, (i + 1) * step));
+                canvasCtx.moveTo(i, (1 + min) * amp);
+                canvasCtx.lineTo(i, (1 + max) * amp);
+            }
+
+            canvasCtx.stroke();
+        }
+
+        async function startMusic() {
+            const videoUrl = document.getElementById('videoUrl').value.trim();
+
+            if (!videoUrl) {
+                log('Please enter a YouTube URL', 'error');
+                return;
+            }
+
+            if (!sessionId) {
+                log('Not connected to server', 'error');
+                return;
+            }
+
+            try {
+                log(`Starting music for: ${videoUrl}`, 'info');
+                updateStatus('🎵 Starting music generation...', 'playing');
+
+                const response = await fetch('http://localhost:3001/api/music/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        video_url: videoUrl,
+                        session_id: sessionId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    log(`Music started! Video: ${result.video_info.title}`, 'success');
+                    log(`Duration: ${result.video_info.duration}s, Live: ${result.video_info.is_live}`, 'info');
+                    updateStatus('🎵 Playing - Listening for audio...', 'playing');
+                    
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    promptBtn.disabled = false;
+                } else {
+                    log('Failed to start music', 'error');
+                    updateStatus('❌ Failed to start', 'connected');
+                }
+
+            } catch (error) {
+                log(`Error starting music: ${error.message}`, 'error');
+                updateStatus('❌ Error', 'connected');
+            }
+        }
+
+        async function stopMusic() {
+            if (!sessionId) return;
+
+            try {
+                log('Stopping music generation...', 'info');
+
+                const response = await fetch('http://localhost:3001/api/music/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    log('Music stopped', 'success');
+                    updateStatus('✅ Connected to server', 'connected');
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    promptBtn.disabled = true;
+                }
+
+            } catch (error) {
+                log(`Error stopping music: ${error.message}`, 'error');
+            }
+        }
+
+        async function sendPrompt() {
+            const prompt = document.getElementById('userPrompt').value.trim();
+
+            if (!prompt) {
+                log('Please enter a prompt', 'error');
+                return;
+            }
+
+            if (!sessionId) {
+                log('Not connected to server', 'error');
+                return;
+            }
+
+            try {
+                log(`Sending prompt: "${prompt}"`, 'info');
+
+                // Send via WebSocket
+                ws.send(JSON.stringify({
+                    type: 'prompt',
+                    prompt: prompt
+                }));
+
+                document.getElementById('userPrompt').value = '';
+                log('Prompt sent via WebSocket', 'success');
+
+            } catch (error) {
+                log(`Error sending prompt: ${error.message}`, 'error');
+            }
+        }
+
+        // Heartbeat
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
+
+        // Handle Enter key
+        document.getElementById('userPrompt').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendPrompt();
+            }
+        });
+
+        document.getElementById('videoUrl').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startMusic();
+            }
+        });
+    </script>
+</body>
+</html>

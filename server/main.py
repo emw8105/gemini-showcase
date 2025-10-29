@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 import uuid
 import os
+import uvicorn
+from datetime import datetime
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
@@ -250,15 +252,13 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"[WebSocket] Error for {session_id}: {e}")
         clients.pop(session_id, None)
 
-
-from datetime import datetime
-
 if __name__ == "__main__":
-    import uvicorn
     
     port = int(os.getenv("PORT", "3001"))
+    print(f"Starting server on port {port} (from .env or default)")
+    
     uvicorn.run(
-        "app.main:app",
+        "main:app",
         host="0.0.0.0",
         port=port,
         reload=True

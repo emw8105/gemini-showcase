@@ -12,7 +12,7 @@ from google.cloud import aiplatform
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part, Image
 import textwrap
-from composition_context import CompositionContext
+from services.composition_context import CompositionContext
 
 
 class GeminiAnalyzer:
