@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+package-lock.json
+__pycache__/
+
+# Environment
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Google Cloud credentials
+*.json
+!package*.json
