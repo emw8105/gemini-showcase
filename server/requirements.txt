@@ -2,7 +2,10 @@
 fastapi==0.109.2
 uvicorn[standard]==0.27.1
 python-dotenv==1.0.1
-websockets==12.0
+# websockets pinned to >=13.0 to satisfy google-genai (requires >=13.0,<15.0)
+# and still meets uvicorn's requirement (websockets>=10.4). Using a range
+# lets pip select a compatible wheel for the environment.
+websockets>=13.0,<15.0
 pydantic==2.6.1
 python-multipart==0.0.9
 
@@ -14,15 +17,15 @@ google-generativeai>=0.8.0  # For Gemini vision (frame analysis)
 opencv-python==4.9.0.80
 numpy==1.26.4
 Pillow==10.2.0
-yt-dlp==2024.3.10
+yt-dlp>=2024.12.13
 ffmpeg-python==0.2.0
 imageio-ffmpeg>=0.4.9
 
 # Frame comparison
 imagehash==4.3.1
-scikit-image==0.22.0
+scikit-image==0.25.2
 
 # Utilities
 aiohttp==3.9.3
-asyncio==3.4.3
-textwrap
+# Note: 'asyncio' and 'textwrap' are part of the Python standard library and
+# must not be listed as pip-installable packages. Keep them out of requirements.
