@@ -15,10 +15,19 @@ import io
 import os
 import tempfile
 import subprocess
+import imageio_ffmpeg
 import yt_dlp
 from typing import Optional, List, Tuple
 from datetime import datetime
 from skimage.metrics import structural_similarity as ssim
+
+
+def resolve_ffmpeg_path() -> str:
+    """Return the ffmpeg executable from imageio-ffmpeg (pip-provided)."""
+    exepath = imageio_ffmpeg.get_ffmpeg_exe()
+    if not exepath or not os.path.exists(exepath):
+        raise RuntimeError("ffmpeg not available from imageio-ffmpeg; run 'pip install imageio-ffmpeg'.")
+    return exepath
 
 
 class FrameExtractor:
@@ -43,7 +52,16 @@ class FrameExtractor:
         self.last_frame: Optional[np.ndarray] = None
         self.temp_dir = tempfile.mkdtemp(prefix="gemini_showcase_")
         
+        # Create screenshots directory for saving processed frames
+        self.screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+        os.makedirs(self.screenshots_dir, exist_ok=True)
+        
+        # Get FFmpeg from imageio-ffmpeg package
+        self.ffmpeg_path = resolve_ffmpeg_path()
+        
         print(f"[FrameExtractor] Initialized with temp directory: {self.temp_dir}")
+        print(f"[FrameExtractor] Screenshots will be saved to: {self.screenshots_dir}")
+        print(f"[FrameExtractor] Using FFmpeg: {self.ffmpeg_path}")
     
     async def initialize(self):
         """Initialize frame extractor."""
@@ -72,7 +90,7 @@ class FrameExtractor:
             
             # FFmpeg command to extract a single frame
             cmd = [
-                'ffmpeg',
+                self.ffmpeg_path,
                 '-ss', str(timestamp_seconds),  # Seek to timestamp
                 '-i', video_stream_url,          # Input URL
                 '-vframes', '1',                 # Extract 1 frame
@@ -102,6 +120,9 @@ class FrameExtractor:
             # Clean up
             os.remove(output_path)
             
+            # Save screenshot for showcase
+            await self._save_screenshot(frame_bytes, f"recorded_{int(timestamp_seconds)}s", video_url)
+            
             return frame_bytes
             
         except Exception as e:
@@ -128,7 +149,7 @@ class FrameExtractor:
             output_path = os.path.join(self.temp_dir, f"livestream_frame_{int(datetime.now().timestamp())}.png")
             
             cmd = [
-                'ffmpeg',
+                self.ffmpeg_path,
                 '-i', video_stream_url,
                 '-vframes', '1',
                 '-f', 'image2',
@@ -153,6 +174,9 @@ class FrameExtractor:
                 frame_bytes = f.read()
             
             os.remove(output_path)
+            
+            # Save screenshot for showcase (livestream frames are unique!)
+            await self._save_screenshot(frame_bytes, f"livestream_{int(datetime.now().timestamp())}", video_url)
             
             return frame_bytes
             
@@ -185,6 +209,22 @@ class FrameExtractor:
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
         return frame
+    
+    async def _save_screenshot(self, frame_bytes: bytes, frame_id: str, video_url: str):
+        """Save frame to screenshots directory for showcase."""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{timestamp}_{frame_id}.png"
+            filepath = os.path.join(self.screenshots_dir, filename)
+            
+            # Save the frame
+            with open(filepath, 'wb') as f:
+                f.write(frame_bytes)
+            
+            print(f"[FrameExtractor] Screenshot saved: {filename}")
+            
+        except Exception as e:
+            print(f"[FrameExtractor] Error saving screenshot: {e}")
     
     async def compare_frames(self, frame1_bytes: bytes, frame2_bytes: bytes) -> float:
         """

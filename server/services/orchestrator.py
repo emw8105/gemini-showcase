@@ -141,15 +141,18 @@ class MusicGenerationOrchestrator:
         video_url = session["video_url"]
         composition_context = session["composition_context"]
         lyria_connection = session["lyria_connection"]
+        session_logger = session["session_logger"]
         
         print(f"[Orchestrator] Starting livestream processing for {session_id}")
         
         previous_frame = None
+        frame_count = 0
         
         while session["is_active"]:
             try:
                 # Extract current frame
                 current_frame = await self.frame_extractor.extract_livestream_frame(video_url)
+                frame_count += 1
                 
                 if previous_frame:
                     # Compare frames
@@ -157,6 +160,7 @@ class MusicGenerationOrchestrator:
                     
                     if is_significant:
                         print(f"[Orchestrator] Significant change detected in livestream {session_id}")
+                        print(f"[Orchestrator] Querying Gemini for frame delta analysis...")
                         
                         # Analyze the change
                         delta_analysis = await self.gemini_analyzer.analyze_frame_delta(
@@ -164,6 +168,11 @@ class MusicGenerationOrchestrator:
                             current_frame,
                             composition_context
                         )
+                        
+                        # Log the analysis
+                        session_logger.log_frame_analysis(frame_count, "Livestream Delta", delta_analysis["analysis"])
+                        
+                        print(f"[Orchestrator] Received analysis from Gemini (needs_change={delta_analysis['needs_change']})")
                         
                         if delta_analysis["needs_change"]:
                             # Update composition context
@@ -173,15 +182,22 @@ class MusicGenerationOrchestrator:
                             new_prompt = composition_context.generate_lyria_prompt(delta_analysis["analysis"])
                             await lyria_connection.update_prompt(new_prompt)
                             
+                            session_logger.log_prompt_update(new_prompt)
                             print(f"[Orchestrator] Updated Lyria prompt for {session_id}")
                 else:
                     # First frame - full analysis
+                    print(f"[Orchestrator] Analyzing initial livestream frame")
                     analysis = await self.gemini_analyzer.analyze_frame(current_frame, composition_context)
+                    
+                    # Log the analysis
+                    session_logger.log_frame_analysis(frame_count, "Livestream Initial", analysis["composition_notes"])
+                    
                     composition_context.update_from_analysis(analysis["composition_notes"])
                     
                     new_prompt = composition_context.generate_lyria_prompt(analysis["composition_notes"])
                     await lyria_connection.update_prompt(new_prompt)
                     
+                    session_logger.log_prompt_update(new_prompt)
                     print(f"[Orchestrator] Initial frame analysis complete for {session_id}")
                 
                 previous_frame = current_frame

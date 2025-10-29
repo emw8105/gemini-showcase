@@ -16,6 +16,7 @@ frontend/dist/
 logs/
 *.log
 npm-debug.log*
+screenshots/
 
 # IDE
 .vscode/
