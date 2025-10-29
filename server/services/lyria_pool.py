@@ -106,16 +106,15 @@ class LyriaConnection:
         
         self.is_active = True
         
-        # Send initial prompt and config
+        # Send initial prompt using Live Music API format
         message = {
-            "clientContent": {
-                "turns": [{
-                    "role": "user",
-                    "parts": [{
-                        "text": initial_prompt
-                    }]
-                }],
-                "turnComplete": True
+            "client_content": {
+                "weightedPrompts": [
+                    {
+                        "text": initial_prompt,
+                        "weight": 1.0
+                    }
+                ]
             }
         }
         
@@ -133,16 +132,15 @@ class LyriaConnection:
         if not self.ws:
             raise RuntimeError("WebSocket not connected")
         
-        # Send update message
+        # Send update using Live Music API format
         message = {
-            "clientContent": {
-                "turns": [{
-                    "role": "user",
-                    "parts": [{
-                        "text": new_prompt
-                    }]
-                }],
-                "turnComplete": True
+            "client_content": {
+                "weightedPrompts": [
+                    {
+                        "text": new_prompt,
+                        "weight": weight
+                    }
+                ]
             }
         }
         
