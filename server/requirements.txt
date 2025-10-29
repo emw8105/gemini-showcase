@@ -7,9 +7,8 @@ pydantic==2.6.1
 python-multipart==0.0.9
 
 # Google Cloud / Gemini
-google-genai==0.2.2
-google-cloud-aiplatform==1.42.1
-vertexai==1.42.1
+google-genai==0.2.2  # For Lyria music generation
+google-generativeai>=0.8.0  # For Gemini vision (frame analysis)
 
 # Video processing
 opencv-python==4.9.0.80
