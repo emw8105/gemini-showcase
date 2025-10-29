@@ -18,8 +18,8 @@ class SessionLogger:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
         
-        # Create log file for this session
-        self.log_file = self.log_dir / f"{session_id}-analysis.txt"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = self.log_dir / f"{timestamp}_{session_id}.txt"
         
         # Initialize log file
         with open(self.log_file, 'w', encoding='utf-8') as f:
