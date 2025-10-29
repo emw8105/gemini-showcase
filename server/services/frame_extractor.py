@@ -14,6 +14,7 @@ from PIL import Image
 import io
 import os
 import tempfile
+import subprocess
 import yt_dlp
 from typing import Optional, List, Tuple
 from datetime import datetime
@@ -50,13 +51,13 @@ class FrameExtractor:
         print(f"[FrameExtractor] Ready to extract frames")
     
     async def extract_frame(self, video_url: str, timestamp_seconds: float = 0) -> bytes:
-        """Extract a single frame from a YouTube video at a specific timestamp."""
+        """Extract a single frame from a YouTube video at a specific timestamp using FFmpeg."""
         try:
             print(f"[FrameExtractor] Extracting frame from {video_url} at {timestamp_seconds}s")
             
-            # Download video segment
+            # Get direct video URL using yt-dlp
             ydl_opts = {
-                'format': 'best[ext=mp4]',
+                'format': 'best[ext=mp4]/best',
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
@@ -66,23 +67,40 @@ class FrameExtractor:
                 info = ydl.extract_info(video_url, download=False)
                 video_stream_url = info['url']
             
-            # Open video with OpenCV
-            cap = cv2.VideoCapture(video_stream_url)
+            # Use FFmpeg to extract frame at specific timestamp
+            output_path = os.path.join(self.temp_dir, f"frame_{int(timestamp_seconds)}.png")
             
-            # Seek to timestamp
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_number = int(timestamp_seconds * fps)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            # FFmpeg command to extract a single frame
+            cmd = [
+                'ffmpeg',
+                '-ss', str(timestamp_seconds),  # Seek to timestamp
+                '-i', video_stream_url,          # Input URL
+                '-vframes', '1',                 # Extract 1 frame
+                '-f', 'image2',                  # Output as image
+                '-y',                            # Overwrite output file
+                output_path
+            ]
             
-            # Read frame
-            ret, frame = cap.read()
-            cap.release()
+            # Run FFmpeg
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
             
-            if not ret:
-                raise Exception("Failed to extract frame")
+            if result.returncode != 0:
+                raise Exception(f"FFmpeg error: {result.stderr}")
             
-            # Convert to PNG bytes
-            frame_bytes = self._frame_to_bytes(frame)
+            # Read the extracted frame
+            if not os.path.exists(output_path):
+                raise Exception("Frame file not created")
+            
+            with open(output_path, 'rb') as f:
+                frame_bytes = f.read()
+            
+            # Clean up
+            os.remove(output_path)
             
             return frame_bytes
             
@@ -91,13 +109,13 @@ class FrameExtractor:
             raise
     
     async def extract_livestream_frame(self, video_url: str) -> bytes:
-        """Extract frame from a livestream (current timestamp)."""
+        """Extract frame from a livestream (current timestamp) using FFmpeg."""
         try:
             print(f"[FrameExtractor] Extracting current frame from livestream: {video_url}")
             
             # Get livestream URL
             ydl_opts = {
-                'format': 'best[ext=mp4]',
+                'format': 'best[ext=mp4]/best',
                 'quiet': True,
                 'no_warnings': True,
             }
@@ -106,15 +124,35 @@ class FrameExtractor:
                 info = ydl.extract_info(video_url, download=False)
                 video_stream_url = info['url']
             
-            # Capture current frame
-            cap = cv2.VideoCapture(video_stream_url)
-            ret, frame = cap.read()
-            cap.release()
+            # Use FFmpeg to capture current frame from livestream
+            output_path = os.path.join(self.temp_dir, f"livestream_frame_{int(datetime.now().timestamp())}.png")
             
-            if not ret:
-                raise Exception("Failed to extract livestream frame")
+            cmd = [
+                'ffmpeg',
+                '-i', video_stream_url,
+                '-vframes', '1',
+                '-f', 'image2',
+                '-y',
+                output_path
+            ]
             
-            frame_bytes = self._frame_to_bytes(frame)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise Exception(f"FFmpeg error: {result.stderr}")
+            
+            if not os.path.exists(output_path):
+                raise Exception("Frame file not created")
+            
+            with open(output_path, 'rb') as f:
+                frame_bytes = f.read()
+            
+            os.remove(output_path)
             
             return frame_bytes
             

@@ -256,7 +256,7 @@
                 type="text" 
                 id="videoUrl" 
                 placeholder="https://www.youtube.com/watch?v=..."
-                value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                value="https://www.youtube.com/watch?v=z9Ug-3qhrwY&t=1s"
             />
         </div>
 
@@ -316,6 +316,7 @@
         let isPlaying = false;
         let chunkCount = 0;
         let totalBytes = 0;
+        let nextPlayTime = 0; // Track when next chunk should play
 
         // UI Elements
         const statusEl = document.getElementById('status');
@@ -425,21 +426,56 @@
                 log('Audio context initialized', 'success');
             }
 
-            // Decode and play audio
+            // Decode raw PCM audio from Lyria
+            // Format: 16-bit PCM, 48kHz, stereo
             try {
                 const arrayBuffer = await blob.arrayBuffer();
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
                 
+                // Raw PCM data: 16-bit signed integers
+                const pcmData = new Int16Array(arrayBuffer);
+                
+                // Lyria sends stereo audio (2 channels)
+                const sampleRate = 48000;
+                const numChannels = 2;
+                const numFrames = pcmData.length / numChannels;
+                
+                // Create audio buffer
+                const audioBuffer = audioContext.createBuffer(
+                    numChannels,
+                    numFrames,
+                    sampleRate
+                );
+                
+                // Deinterleave and convert to float [-1, 1]
+                for (let channel = 0; channel < numChannels; channel++) {
+                    const channelData = audioBuffer.getChannelData(channel);
+                    for (let i = 0; i < numFrames; i++) {
+                        // Convert 16-bit int to float [-1, 1]
+                        channelData[i] = pcmData[i * numChannels + channel] / 32768.0;
+                    }
+                }
+                
+                // Play the audio with buffering
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
-                source.start(0);
+                
+                // Schedule playback to ensure smooth continuous audio
+                const currentTime = audioContext.currentTime;
+                const startTime = Math.max(currentTime, nextPlayTime);
+                source.start(startTime);
+                
+                // Update next play time for seamless playback
+                nextPlayTime = startTime + audioBuffer.duration;
+
+                log(`Playing ${numFrames} frames (${(numFrames / sampleRate).toFixed(2)}s) at ${startTime.toFixed(2)}s`, 'audio');
 
                 // Simple visualization
                 visualizeAudio(audioBuffer);
                 
             } catch (error) {
-                log(`Audio decode error: ${error.message}`, 'error');
+                log(`Audio processing error: ${error.message}`, 'error');
+                console.error('Audio processing error:', error);
             }
         }
 
@@ -538,6 +574,13 @@
                     startBtn.disabled = false;
                     stopBtn.disabled = true;
                     promptBtn.disabled = true;
+                    
+                    // Reset audio playback state
+                    nextPlayTime = 0;
+                    chunkCount = 0;
+                    totalBytes = 0;
+                    chunkCountEl.textContent = '0';
+                    dataReceivedEl.textContent = '0 KB';
                 }
 
             } catch (error) {

@@ -16,6 +16,7 @@ from services.lyria_pool import LyriaConnectionPool, LyriaConnection
 from services.composition_context import CompositionContext
 from services.gemini_analyzer import GeminiAnalyzer
 from services.frame_extractor import FrameExtractor
+from services.session_logger import SessionLogger
 
 
 class MusicGenerationOrchestrator:
@@ -66,6 +67,10 @@ class MusicGenerationOrchestrator:
             # Create composition context
             composition_context = CompositionContext(video_info["title"])
             
+            # Create session logger
+            session_logger = SessionLogger(session_id)
+            print(f"[Orchestrator] Session log: {session_logger.get_log_path()}")
+            
             # Acquire Lyria connection from pool (pre-warmed, instant)
             lyria_connection = await self.lyria_pool.acquire_connection(session_id)
             
@@ -92,6 +97,7 @@ class MusicGenerationOrchestrator:
                 "composition_context": composition_context,
                 "lyria_connection": lyria_connection,
                 "client_websocket": client_websocket,
+                "session_logger": session_logger,
                 "is_live": video_info["is_live"],
                 "frame_index": 0,
                 "is_active": True,
@@ -220,12 +226,19 @@ class MusicGenerationOrchestrator:
                     if difference > self.frame_extractor.frame_diff_threshold:
                         print(f"[Orchestrator] Scene change detected at {timestamp}s in {session_id}")
                         
-                        # Analyze the change
+                        # Query Gemini for analysis
+                        print(f"[Orchestrator] Querying Gemini for frame delta analysis...")
                         delta_analysis = await self.gemini_analyzer.analyze_frame_delta(
                             previous_frame,
                             current_frame,
                             composition_context
                         )
+                        
+                        # Log to session file
+                        session_logger = session["session_logger"]
+                        session_logger.log_frame_analysis(timestamp, "Delta Analysis", delta_analysis["analysis"])
+                        
+                        print(f"[Orchestrator] Received analysis from Gemini (needs_change={delta_analysis['needs_change']})")
                         
                         if delta_analysis["needs_change"]:
                             composition_context.update_from_analysis(delta_analysis["analysis"])
@@ -233,15 +246,28 @@ class MusicGenerationOrchestrator:
                             new_prompt = composition_context.generate_lyria_prompt(delta_analysis["analysis"])
                             await lyria_connection.update_prompt(new_prompt)
                             
+                            session_logger.log_prompt_update(new_prompt)
+                            print(f"[Orchestrator] Updated composition at {timestamp}s")
+                            
+                            new_prompt = composition_context.generate_lyria_prompt(delta_analysis["analysis"])
+                            await lyria_connection.update_prompt(new_prompt)
+                            
                             print(f"[Orchestrator] Updated composition at {timestamp}s")
                 else:
                     # First frame
+                    print(f"[Orchestrator] Analyzing initial frame at {timestamp}s")
                     analysis = await self.gemini_analyzer.analyze_frame(current_frame, composition_context)
+                    
+                    # Log to session file
+                    session_logger = session["session_logger"]
+                    session_logger.log_frame_analysis(timestamp, "Initial Analysis", analysis["composition_notes"])
+                    
                     composition_context.update_from_analysis(analysis["composition_notes"])
                     
                     new_prompt = composition_context.generate_lyria_prompt(analysis["composition_notes"])
                     await lyria_connection.update_prompt(new_prompt)
                     
+                    session_logger.log_prompt_update(new_prompt)
                     print(f"[Orchestrator] Initial analysis complete for {session_id}")
                 
                 previous_frame = current_frame
@@ -265,6 +291,10 @@ class MusicGenerationOrchestrator:
         
         composition_context = session["composition_context"]
         lyria_connection = session["lyria_connection"]
+        session_logger = session["session_logger"]
+        
+        # Log user prompt
+        session_logger.log_user_prompt(user_prompt)
         
         # Add user prompt to context (persists across all future updates)
         composition_context.add_user_prompt(user_prompt)
@@ -273,6 +303,7 @@ class MusicGenerationOrchestrator:
         new_prompt = composition_context.generate_lyria_prompt(user_prompt)
         await lyria_connection.update_prompt(new_prompt)
         
+        session_logger.log_prompt_update(new_prompt)
         print(f"[Orchestrator] User prompt applied to {session_id}")
         
         return {"success": True, "message": "Prompt applied"}
@@ -288,6 +319,10 @@ class MusicGenerationOrchestrator:
         print(f"[Orchestrator] Stopping music generation for {session_id}")
         
         session["is_active"] = False
+        
+        # Log session end
+        if "session_logger" in session:
+            session["session_logger"].log_session_end()
         
         # Release Lyria connection back to pool
         await self.lyria_pool.release_connection(session_id)

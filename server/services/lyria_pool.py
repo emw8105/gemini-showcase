@@ -13,6 +13,44 @@ from typing import Dict, Optional, Callable
 from datetime import datetime
 import websockets
 from websockets.client import WebSocketClientProtocol
+import re
+
+
+def sanitize_prompt_for_lyria(prompt: str) -> str:
+    """
+    Remove copyrighted content references from prompts to avoid Lyria filtering.
+    
+    Lyria will reject prompts mentioning:
+    - Specific song titles
+    - Artist names  
+    - Video titles
+    - Copyrighted material
+    
+    We keep only the musical descriptors (mood, genre, instruments, tempo, etc.)
+    """
+    # Remove common patterns that trigger filtering
+    patterns_to_remove = [
+        r'titled\s+"[^"]+"',  # titled "Song Name"
+        r'titled\s+\'[^\']+\'',  # titled 'Song Name'
+        r'video\s+titled[^.]+\.',  # video titled X.
+        r'for\s+a\s+video\s+titled[^.]+\.',  # for a video titled X.
+        r'Music for:\s+[^.]+\.',  # Music for: X.
+        r'Current:\s+',  # Current: (keep the content after)
+        r'Scene update:\s+',  # Scene update: (keep the content after)
+    ]
+    
+    sanitized = prompt
+    for pattern in patterns_to_remove:
+        sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+    
+    # Clean up extra whitespace
+    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+    
+    # If we stripped too much, provide a generic fallback
+    if len(sanitized) < 10:
+        return "ambient instrumental background music"
+    
+    return sanitized
 
 
 class LyriaConnection:
@@ -72,24 +110,37 @@ class LyriaConnection:
             async for message in self.ws:
                 data = json.loads(message)
                 
-                # Handle audio data
+                # Handle filtered prompts (content policy violations)
+                if "filteredPrompt" in data:
+                    filtered = data["filteredPrompt"]
+                    print(f"[LyriaConnection] {self.id} prompt was filtered!")
+                    print(f"[LyriaConnection] {self.id} reason: {filtered.get('filteredReason', 'unknown')}")
+                    continue
+                
+                # Handle errors
+                if "error" in data:
+                    print(f"[LyriaConnection] {self.id} received error: {data.get('error')}")
+                    continue
+                
+                # Handle audio chunks from serverContent
                 if "serverContent" in data:
                     server_content = data["serverContent"]
-                    if "modelTurn" in server_content:
-                        model_turn = server_content["modelTurn"]
-                        if "parts" in model_turn:
-                            for part in model_turn["parts"]:
-                                if "inlineData" in part:
-                                    # Base64 encoded audio
-                                    audio_b64 = part["inlineData"]["data"]
-                                    audio_data = base64.b64decode(audio_b64)
-                                    
-                                    if self.on_audio_data and audio_data:
-                                        await self.on_audio_data(audio_data)
-                
-                # Handle turn completion
-                if "serverContent" in data and "turnComplete" in data["serverContent"]:
-                    print(f"[LyriaConnection] {self.id} turn complete")
+                    
+                    # Look for audioChunks (the actual audio data)
+                    if "audioChunks" in server_content:
+                        for chunk in server_content["audioChunks"]:
+                            if "data" in chunk:
+                                # Base64 encoded PCM audio
+                                audio_b64 = chunk["data"]
+                                audio_data = base64.b64decode(audio_b64)
+                                
+                                if self.on_audio_data and audio_data:
+                                    print(f"[LyriaConnection] {self.id} sending {len(audio_data)} bytes of audio")
+                                    await self.on_audio_data(audio_data)
+                    
+                    # Handle turn completion
+                    if "turnComplete" in server_content:
+                        print(f"[LyriaConnection] {self.id} turn complete")
                     
         except asyncio.CancelledError:
             print(f"[LyriaConnection] {self.id} receive task cancelled")
@@ -99,35 +150,44 @@ class LyriaConnection:
     
     async def start(self, initial_prompt: str, bpm: int = 120, temperature: float = 1.0):
         """Start music generation with initial prompt."""
-        print(f"[LyriaConnection] {self.id} starting with prompt: {initial_prompt}")
+        # Sanitize prompt to avoid filtering
+        sanitized_prompt = sanitize_prompt_for_lyria(initial_prompt)
+        print(f"[LyriaConnection] {self.id} starting with prompt: {sanitized_prompt}")
         
         if not self.ws:
             raise RuntimeError("WebSocket not connected")
         
         self.is_active = True
         
+        # Start the receive task FIRST (before sending prompt)
+        self._recv_task = asyncio.create_task(self._receive_audio())
+        
         # Send initial prompt using Live Music API format
-        message = {
+        prompt_message = {
             "client_content": {
                 "weightedPrompts": [
                     {
-                        "text": initial_prompt,
+                        "text": sanitized_prompt,
                         "weight": 1.0
                     }
                 ]
             }
         }
+        await self.ws.send(json.dumps(prompt_message))
         
-        await self.ws.send(json.dumps(message))
-        
-        # Start the receive task
-        self._recv_task = asyncio.create_task(self._receive_audio())
+        # Send playback control to actually start generation
+        control_message = {
+            "playback_control": "play"
+        }
+        await self.ws.send(json.dumps(control_message))
         
         print(f"[LyriaConnection] {self.id} music generation started")
     
     async def update_prompt(self, new_prompt: str, weight: float = 1.0):
         """Update composition with new prompt."""
-        print(f"[LyriaConnection] {self.id} updating prompt: {new_prompt}")
+        # Sanitize prompt to avoid filtering
+        sanitized_prompt = sanitize_prompt_for_lyria(new_prompt)
+        print(f"[LyriaConnection] {self.id} updating prompt (length: {len(sanitized_prompt)} chars)")
         
         if not self.ws:
             raise RuntimeError("WebSocket not connected")
@@ -137,7 +197,7 @@ class LyriaConnection:
             "client_content": {
                 "weightedPrompts": [
                     {
-                        "text": new_prompt,
+                        "text": sanitized_prompt,
                         "weight": weight
                     }
                 ]

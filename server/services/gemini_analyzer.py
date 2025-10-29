@@ -92,8 +92,6 @@ class GeminiAnalyzer:
             
             composition_notes = response.text.strip()
             
-            print(f"[GeminiAnalyzer] Generated composition notes: {composition_notes}")
-            
             return {
                 "description": description,
                 "composition_notes": composition_notes,
@@ -167,8 +165,6 @@ Analysis:"""
             )
             
             analysis = response.text.strip()
-            
-            print(f"[GeminiAnalyzer] Frame delta analysis: {analysis}")
             
             # Check if change is needed
             lower_analysis = analysis.lower()
