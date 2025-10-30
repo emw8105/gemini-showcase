@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Lyria Showcase - Test Client</title>
+    <title>Delphi - Real-Time Soundtrack Generation</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
         * {
             margin: 0;
             padding: 0;
@@ -12,187 +14,460 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: rgba(6, 182, 212, 0.6);
+            border-radius: 50%;
+            animation: float 20s infinite;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) translateX(50px);
+                opacity: 0;
+            }
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.15), transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.15), transparent 50%),
+                        radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1), transparent 70%);
+            animation: gradientPulse 8s ease-in-out infinite;
+        }
+
+        @keyframes gradientPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 40px;
         }
 
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 100px 0 60px;
+            position: relative;
         }
 
-        .subtitle {
-            color: #666;
+        .logo {
+            font-family: 'Cinzel', serif;
+            font-size: 80px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #06b6d4 0%, #a855f7 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            animation: glowPulse 3s ease-in-out infinite;
+            text-shadow: 0 0 80px rgba(6, 182, 212, 0.5);
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { filter: brightness(1) drop-shadow(0 0 20px rgba(6, 182, 212, 0.6)); }
+            50% { filter: brightness(1.2) drop-shadow(0 0 40px rgba(168, 85, 247, 0.8)); }
+        }
+
+        .oracle-subtitle {
+            font-family: 'Cinzel', serif;
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 6px;
+            margin-bottom: 50px;
+            text-transform: uppercase;
+        }
+
+        .hero-title {
+            font-size: 72px;
+            font-weight: 700;
             margin-bottom: 30px;
+            line-height: 1.1;
+            letter-spacing: -2px;
+            max-width: 900px;
+        }
+
+        .hero-subtitle {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 50px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+            font-weight: 300;
+        }
+
+        .hero-tags {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 60px;
+        }
+
+        .tag {
+            padding: 12px 28px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
             font-size: 14px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 0.5px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tag:hover {
+            background: rgba(6, 182, 212, 0.15);
+            border-color: rgba(6, 182, 212, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.5);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(10px); }
+        }
+
+        .section {
+            padding: 100px 0;
+            position: relative;
+        }
+
+        .section-title {
+            font-family: 'Cinzel', serif;
+            font-size: 48px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 60px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 80px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #06b6d4, #a855f7, #ec4899);
+            transform: scaleX(0);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .feature-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(6, 182, 212, 0.3);
+            transform: translateY(-8px);
+        }
+
+        .feature-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .feature-description {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.6;
+        }
+
+        .demo-container {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            padding: 60px;
+            margin: 80px 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        }
+
+        .demo-title {
+            font-family: 'Cinzel', serif;
+            font-size: 36px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
         }
 
         .status {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-size: 14px;
+            padding: 16px 24px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            font-size: 15px;
             font-weight: 500;
+            backdrop-filter: blur(20px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
         }
 
         .status.disconnected {
-            background: #fee;
-            color: #c33;
-            border: 1px solid #fcc;
+            background: rgba(244, 63, 94, 0.15);
+            color: #f43f5e;
+            border-color: rgba(244, 63, 94, 0.3);
         }
 
         .status.connected {
-            background: #efe;
-            color: #3c3;
-            border: 1px solid #cfc;
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border-color: rgba(34, 197, 94, 0.3);
         }
 
         .status.playing {
-            background: #eef;
-            color: #33c;
-            border: 1px solid #ccf;
-            animation: pulse 2s infinite;
+            background: rgba(6, 182, 212, 0.15);
+            color: #06b6d4;
+            border-color: rgba(6, 182, 212, 0.3);
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.01); }
+        }
+
+        .session-info {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 30px;
+            word-break: break-all;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
         }
 
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         label {
             display: block;
-            margin-bottom: 8px;
-            color: #555;
+            margin-bottom: 10px;
+            color: rgba(255, 255, 255, 0.8);
             font-weight: 500;
-            font-size: 14px;
+            font-size: 15px;
+            letter-spacing: 0.3px;
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
+            padding: 16px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            font-size: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+        }
+
+        input[type="text"]::placeholder {
+            color: rgba(255, 255, 255, 0.4);
         }
 
         input[type="text"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: rgba(6, 182, 212, 0.6);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.15);
         }
 
         .button-group {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 24px;
         }
 
         button {
             flex: 1;
-            padding: 12px 20px;
+            padding: 16px 28px;
             border: none;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 12px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        button:hover::before {
+            width: 300px;
+            height: 300px;
         }
 
         button:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
         }
 
+        button:disabled::before {
+            display: none;
+        }
+
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%);
             color: white;
+            box-shadow: 0 4px 16px rgba(6, 182, 212, 0.3);
         }
 
         .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .btn-secondary:hover:not(:disabled) {
-            background: #e0e0e0;
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         .btn-danger {
-            background: #ff4444;
+            background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
             color: white;
+            box-shadow: 0 4px 16px rgba(236, 72, 153, 0.3);
         }
 
         .btn-danger:hover:not(:disabled) {
-            background: #cc0000;
-        }
-
-        .log {
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            margin-bottom: 20px;
-        }
-
-        .log-entry {
-            margin-bottom: 5px;
-            padding: 5px;
-            border-radius: 4px;
-        }
-
-        .log-entry.info {
-            color: #0066cc;
-        }
-
-        .log-entry.success {
-            color: #009900;
-            font-weight: bold;
-        }
-
-        .log-entry.error {
-            color: #cc0000;
-            font-weight: bold;
-        }
-
-        .log-entry.audio {
-            color: #9900cc;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(236, 72, 153, 0.4);
         }
 
         .audio-viz {
-            background: #000;
-            border-radius: 8px;
-            height: 100px;
-            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            height: 140px;
+            margin-bottom: 24px;
             position: relative;
             overflow: hidden;
+            backdrop-filter: blur(20px);
         }
 
         .audio-viz canvas {
@@ -200,129 +475,294 @@
             height: 100%;
         }
 
+        .log {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            max-height: 240px;
+            overflow-y: auto;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(20px);
+        }
+
+        .log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .log::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .log-entry {
+            margin-bottom: 6px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease-out;
+            line-height: 1.5;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-entry.info { color: rgba(6, 182, 212, 0.9); }
+        .log-entry.success { color: rgba(34, 197, 94, 0.9); font-weight: 600; }
+        .log-entry.error { color: rgba(244, 63, 94, 0.9); font-weight: 600; }
+        .log-entry.audio { color: rgba(168, 85, 247, 0.9); }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-top: 20px;
+            gap: 16px;
+            margin-top: 24px;
         }
 
         .stat-card {
-            background: #f8f8f8;
-            padding: 15px;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            padding: 24px;
+            border-radius: 16px;
             text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
         }
 
         .stat-label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 5px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 8px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
 
         .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #06b6d4 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
         }
 
-        .session-info {
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            color: #666;
+        .cta-section {
+            text-align: center;
+            padding: 100px 0;
+            background: linear-gradient(180deg, transparent 0%, rgba(6, 182, 212, 0.05) 100%);
+        }
+
+        .cta-title {
+            font-family: 'Cinzel', serif;
+            font-size: 48px;
+            font-weight: 700;
             margin-bottom: 20px;
-            word-break: break-all;
+            letter-spacing: 1px;
+        }
+
+        .cta-subtitle {
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .google-badge {
+            display: inline-block;
+            padding: 16px 32px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50px;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 0 20px; }
+            .logo { font-size: 48px; letter-spacing: 4px; }
+            .hero-title { font-size: 42px; }
+            .hero-subtitle { font-size: 18px; }
+            .section-title { font-size: 36px; }
+            .demo-container { padding: 30px 20px; }
+            .feature-grid { grid-template-columns: 1fr; }
+            .button-group { flex-direction: column; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎵 Gemini Lyria Showcase</h1>
-        <p class="subtitle">Live music generation from video content</p>
+    <!-- Background effects -->
+    <div class="bg-gradient"></div>
+    <div class="particles" id="particles"></div>
 
-        <div id="status" class="status disconnected">
-            ⚫ Disconnected from server
-        </div>
-
-        <div class="session-info" id="sessionInfo">
-            Session ID: Not connected
-        </div>
-
-        <div class="input-group">
-            <label for="videoUrl">YouTube Video URL</label>
-            <input 
-                type="text" 
-                id="videoUrl" 
-                placeholder="https://www.youtube.com/watch?v=..."
-                value="https://www.youtube.com/watch?v=z9Ug-3qhrwY"
-            />
-        </div>
-
-        <div class="button-group">
-            <button id="connectBtn" class="btn-primary" onclick="connect()">
-                Connect to Server
-            </button>
-            <button id="startBtn" class="btn-primary" onclick="startMusic()" disabled>
-                Start Music
-            </button>
-            <button id="stopBtn" class="btn-danger" onclick="stopMusic()" disabled>
-                Stop
-            </button>
-        </div>
-
-        <div class="input-group">
-            <label for="userPrompt">User Prompt (optional)</label>
-            <input 
-                type="text" 
-                id="userPrompt" 
-                placeholder="e.g., make it more epic, add heavy drums..."
-            />
-        </div>
-
-        <div class="button-group">
-            <button id="promptBtn" class="btn-secondary" onclick="sendPrompt()" disabled>
-                Send Prompt
-            </button>
-        </div>
-
-        <div class="input-group">
-            <label for="seekOffset">🎯 Test Video Scrubbing (seconds)</label>
-            <input 
-                type="text" 
-                id="seekOffset" 
-                placeholder="e.g., 120 (jump to 2:00)"
-            />
-        </div>
-
-        <div class="button-group">
-            <button id="seekBtn" class="btn-secondary" onclick="sendSeek()" disabled>
-                Simulate Seek
-            </button>
-        </div>
-
-        <div class="audio-viz" id="audioViz">
-            <canvas id="visualizer"></canvas>
-        </div>
-
-        <div class="log" id="log">
-            <div class="log-entry info">Ready to connect...</div>
-        </div>
-
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-label">Audio Chunks</div>
-                <div class="stat-value" id="chunkCount">0</div>
+    <!-- Hero Section -->
+    <div class="hero">
+        <div class="container">
+            <div class="logo">DELPHI</div>
+            <div class="oracle-subtitle">Oracle of Apollo</div>
+            <h1 class="hero-title">Real-Time Soundtrack Generation</h1>
+            <p class="hero-subtitle">Bringing Gemini Lyria to life for video content with intelligent optimization and seamless streaming</p>
+            <div class="hero-tags">
+                <div class="tag">🎵 Powered by Gemini Lyria</div>
+                <div class="tag">⚡ Real-Time Streaming</div>
+                <div class="tag">🎯 Smart API Optimization</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Data Received</div>
-                <div class="stat-value" id="dataReceived">0 KB</div>
+        </div>
+        <div class="scroll-indicator">↓ Scroll to explore</div>
+    </div>
+
+    <!-- What We Built -->
+    <div class="section">
+        <div class="container">
+            <h2 class="section-title">What We Built</h2>
+            <p class="section-subtitle">Delphi makes Gemini Lyria practical for real-world video applications by solving key challenges in streaming and optimization</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🎬</span>
+                    <h3 class="feature-title">Video Integration</h3>
+                    <p class="feature-description">Seamlessly connects Lyria to YouTube videos, enabling dynamic soundtrack generation that responds to visual content in real-time</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">⚡</span>
+                    <h3 class="feature-title">Smart Optimization</h3>
+                    <p class="feature-description">Minimizes API calls by detecting meaningful prompt changes, ensuring efficient resource usage without sacrificing musical quality</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎵</span>
+                    <h3 class="feature-title">Seamless Streaming</h3>
+                    <p class="feature-description">Buffers and streams PCM audio chunks for uninterrupted playback, creating a smooth listening experience without gaps or latency</p>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Live Demo -->
+    <div class="container">
+        <div class="demo-container">
+            <h2 class="demo-title">Live Demo</h2>
+
+            <div id="status" class="status disconnected">
+                ⚫ Disconnected from server
+            </div>
+
+            <div class="session-info" id="sessionInfo">
+                Session ID: Not connected
+            </div>
+
+            <div class="input-group">
+                <label for="videoUrl">YouTube Video URL</label>
+                <input 
+                    type="text" 
+                    id="videoUrl" 
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value="https://www.youtube.com/watch?v=z9Ug-3qhrwY"
+                />
+            </div>
+
+            <div class="button-group">
+                <button id="connectBtn" class="btn-primary" onclick="connect()">
+                    Connect to Server
+                </button>
+                <button id="startBtn" class="btn-primary" onclick="startMusic()" disabled>
+                    Start Music
+                </button>
+                <button id="stopBtn" class="btn-danger" onclick="stopMusic()" disabled>
+                    Stop
+                </button>
+            </div>
+
+            <div class="input-group">
+                <label for="userPrompt">User Prompt (optional)</label>
+                <input 
+                    type="text" 
+                    id="userPrompt" 
+                    placeholder="e.g., make it more epic, add heavy drums..."
+                />
+            </div>
+
+            <div class="button-group">
+                <button id="promptBtn" class="btn-secondary" onclick="sendPrompt()" disabled>
+                    Send Prompt
+                </button>
+            </div>
+
+            <div class="input-group">
+                <label for="seekOffset">🎯 Test Video Scrubbing (seconds)</label>
+                <input 
+                    type="text" 
+                    id="seekOffset" 
+                    placeholder="e.g., 120 (jump to 2:00)"
+                />
+            </div>
+
+            <div class="button-group">
+                <button id="seekBtn" class="btn-secondary" onclick="sendSeek()" disabled>
+                    Simulate Seek
+                </button>
+            </div>
+
+            <div class="audio-viz" id="audioViz">
+                <canvas id="visualizer"></canvas>
+            </div>
+
+            <div class="log" id="log">
+                <div class="log-entry info">Ready to connect...</div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-label">Audio Chunks</div>
+                    <div class="stat-value" id="chunkCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Data Received</div>
+                    <div class="stat-value" id="dataReceived">0 KB</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="cta-section">
+        <div class="container">
+            <h2 class="cta-title">Help Shape the Future</h2>
+            <p class="cta-subtitle">Built to explore Lyria's capabilities and identify opportunities for improvement. We're excited to share our learnings and hear how the Gemini team can enhance Lyria and the developer experience.</p>
+            <div class="google-badge">Built for Google Gemini Team</div>
+        </div>
+    </div>
+
     <script>
+        // Create floating particles
+        const particlesContainer = document.getElementById('particles');
+        for (let i = 0; i < 50; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 20 + 's';
+            particle.style.animationDuration = (15 + Math.random() * 10) + 's';
+            particlesContainer.appendChild(particle);
+        }
+
         // Global state
         let ws = null;
         let sessionId = null;
@@ -331,10 +771,10 @@
         let isPlaying = false;
         let chunkCount = 0;
         let totalBytes = 0;
-        let nextPlayTime = 0; // Track when next chunk should play
-        let isBuffering = true; // Start in buffering state
-        let bufferTargetSeconds = 1.5; // Aim for 1.5 seconds of audio buffered
-        let bufferedDuration = 0; // Track how much audio we have buffered
+        let nextPlayTime = 0;
+        let isBuffering = true;
+        let bufferTargetSeconds = 1.5;
+        let bufferedDuration = 0;
 
         // UI Elements
         const statusEl = document.getElementById('status');
@@ -354,7 +794,6 @@
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
 
-        // Logging
         function log(message, type = 'info') {
             const entry = document.createElement('div');
             entry.className = `log-entry ${type}`;
@@ -368,7 +807,6 @@
             statusEl.className = `status ${state}`;
         }
 
-        // WebSocket connection
         async function connect() {
             try {
                 log('Connecting to WebSocket server...', 'info');
@@ -385,10 +823,8 @@
 
                 ws.onmessage = async (event) => {
                     if (event.data instanceof Blob) {
-                        // Audio data
                         handleAudioData(event.data);
                     } else {
-                        // JSON message
                         const data = JSON.parse(event.data);
                         handleJsonMessage(data);
                     }
@@ -445,88 +881,66 @@
 
             log(`Audio chunk received: ${blob.size} bytes`, 'audio');
 
-            // Initialize audio context if needed
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 log('Audio context initialized', 'success');
-                // Reset buffering state when starting fresh
                 isBuffering = true;
                 bufferedDuration = 0;
                 nextPlayTime = 0;
             }
 
-            // Decode raw PCM audio from Lyria
-            // Format: 16-bit PCM, 48kHz, stereo
             try {
                 const arrayBuffer = await blob.arrayBuffer();
-                
-                // Raw PCM data: 16-bit signed integers
                 const pcmData = new Int16Array(arrayBuffer);
-                
-                // Lyria sends stereo audio (2 channels)
                 const sampleRate = 48000;
                 const numChannels = 2;
                 const numFrames = pcmData.length / numChannels;
                 
-                // Create audio buffer
                 const audioBuffer = audioContext.createBuffer(
                     numChannels,
                     numFrames,
                     sampleRate
                 );
                 
-                // Deinterleave and convert to float [-1, 1]
                 for (let channel = 0; channel < numChannels; channel++) {
                     const channelData = audioBuffer.getChannelData(channel);
                     for (let i = 0; i < numFrames; i++) {
-                        // Convert 16-bit int to float [-1, 1]
                         channelData[i] = pcmData[i * numChannels + channel] / 32768.0;
                     }
                 }
                 
                 const chunkDuration = audioBuffer.duration;
                 
-                // Buffer management: Only start playback when we have enough buffered
                 if (isBuffering) {
                     bufferedDuration += chunkDuration;
                     log(`Buffering... ${bufferedDuration.toFixed(2)}s / ${bufferTargetSeconds}s`, 'info');
                     
                     if (bufferedDuration >= bufferTargetSeconds || chunkCount >= 3) {
-                        // We have enough buffer, start playback!
                         isBuffering = false;
-                        nextPlayTime = audioContext.currentTime + 0.1; // Small delay to ensure smooth start
+                        nextPlayTime = audioContext.currentTime + 0.1;
                         log(`Buffer ready! Starting playback with ${bufferedDuration.toFixed(2)}s buffered`, 'success');
                         updateStatus('🎵 Playing - Audio buffered and streaming', 'playing');
                     }
                 }
                 
-                // Play the audio with buffering
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
                 
                 if (!isBuffering) {
-                    // Schedule playback to ensure smooth continuous audio
                     const currentTime = audioContext.currentTime;
                     const startTime = Math.max(currentTime, nextPlayTime);
                     source.start(startTime);
-                    
-                    // Update next play time for seamless playback
                     nextPlayTime = startTime + chunkDuration;
-
                     log(`Playing ${numFrames} frames (${chunkDuration.toFixed(2)}s) at ${startTime.toFixed(2)}s`, 'audio');
                 } else {
-                    // Still buffering, queue the source for later playback
-                    // We'll play it once buffering is complete
                     const startTime = nextPlayTime || (audioContext.currentTime + 0.1);
                     source.start(startTime);
                     nextPlayTime = startTime + chunkDuration;
                 }
 
-                // Simple visualization
                 visualizeAudio(audioBuffer);
                 
-                // Monitor buffer health
                 const bufferHealth = (nextPlayTime - audioContext.currentTime);
                 if (bufferHealth < 0.5 && !isBuffering) {
                     log(`⚠️ Buffer running low: ${bufferHealth.toFixed(2)}s`, 'error');
@@ -545,11 +959,16 @@
             const step = Math.ceil(data.length / canvas.width);
             const amp = canvas.height / 2;
 
-            canvasCtx.fillStyle = '#000';
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            canvasCtx.strokeStyle = '#667eea';
-            canvasCtx.lineWidth = 2;
+            const gradient = canvasCtx.createLinearGradient(0, 0, canvas.width, 0);
+            gradient.addColorStop(0, '#06b6d4');
+            gradient.addColorStop(0.5, '#a855f7');
+            gradient.addColorStop(1, '#ec4899');
+
+            canvasCtx.strokeStyle = gradient;
+            canvasCtx.lineWidth = 2.5;
             canvasCtx.beginPath();
 
             for (let i = 0; i < canvas.width; i++) {
@@ -602,7 +1021,6 @@
                     promptBtn.disabled = false;
                     seekBtn.disabled = false;
                     
-                    // Reset buffering state for new session
                     isBuffering = true;
                     bufferedDuration = 0;
                     nextPlayTime = 0;
@@ -643,7 +1061,6 @@
                     promptBtn.disabled = true;
                     seekBtn.disabled = true;
                     
-                    // Reset audio playback state
                     nextPlayTime = 0;
                     chunkCount = 0;
                     totalBytes = 0;
@@ -674,7 +1091,6 @@
             try {
                 log(`Sending prompt: "${prompt}"`, 'info');
 
-                // Send via WebSocket
                 ws.send(JSON.stringify({
                     type: 'prompt',
                     prompt: prompt
@@ -711,7 +1127,6 @@
             try {
                 log(`🎯 Simulating video seek to ${offset}s`, 'info');
 
-                // Send via WebSocket (faster than REST)
                 ws.send(JSON.stringify({
                     type: 'seek',
                     offset: offset
@@ -725,14 +1140,12 @@
             }
         }
 
-        // Heartbeat
         setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ping' }));
             }
         }, 30000);
 
-        // Handle Enter key
         document.getElementById('userPrompt').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendPrompt();
