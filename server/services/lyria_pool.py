@@ -329,18 +329,21 @@ class LyriaConnectionPool:
         
         # Stop the active session
         await connection.stop()
+
+        # Close and reconnect to clear audio buffer (prevents old audio from playing on the next session)
+        print(f"[LyriaPool] Resetting connection {connection.id} to clear buffer...")
+        await connection.close()
+        await connection.connect()
         
         # Reset connection state
         connection.is_active = False
         connection.session_id = None
+        connection.on_audio_data = None  # Clear callback
         
         del self.active_connections[session_id]
         
-        print(f"[LyriaPool] Released connection {connection.id} from session {session_id}")
+        print(f"[LyriaPool] Released and reset connection {connection.id}")
         print(f"[LyriaPool] Pool status: {self._count_available()}/{len(self.pool)} available")
-        
-        # Create a new connection to maintain pool size
-        asyncio.create_task(self._create_connection(len(self.pool)))
     
     def get_connection(self, session_id: str) -> Optional[LyriaConnection]:
         """Get active connection for a session."""
