@@ -61,6 +61,44 @@ class GeminiAnalyzer:
         """Convert bytes to PIL Image."""
         return Image.open(io.BytesIO(frame_bytes))
     
+    def _generate_lyria_optimized_prompt(self, frame_description: str, composition_context: CompositionContext) -> str:
+        """Generate a Lyria-optimized prompt that produces rich musical descriptions."""
+        state = composition_context.current_state
+        
+        prompt = f"""You are a music director creating prompts for Lyria RealTime, an AI music generation system.
+
+Video: "{composition_context.video_title}"
+Frame: {frame_description}
+
+Current music state:
+- Mood: {state['mood']}
+- Tempo: {state['tempo']}
+- Intensity: {state['intensity']}
+
+LYRIA CAPABILITIES:
+Lyria responds best to rich, descriptive prompts that specify:
+1. **Instruments**: Guitar, Piano, Synth Pads, Cello, Drums, Saxophone, etc.
+2. **Genre**: EDM, Jazz, Classical, Rock, Ambient, Cinematic, etc.
+3. **Mood/Atmosphere**: Dreamy, Energetic, Dark, Upbeat, Ethereal, Ominous, etc.
+4. **Musical qualities**: Tight Groove, Rich Orchestration, Fat Beats, Ambient, Virtuoso, etc.
+
+YOUR TASK:
+Generate a concise but descriptive music prompt (2-3 sentences) that:
+- Matches the scene's visual mood and energy
+- Specifies concrete instruments and genre
+- Uses vivid musical descriptors
+- Builds on the current state smoothly (no abrupt changes)
+
+EXAMPLES:
+- "Upbeat synthpop with bright tones and spacey synths. Danceable rhythm with a tight groove."
+- "Cinematic orchestral score with rich string arrangements. Emotional and building intensity."
+- "Chill lo-fi hip hop featuring smooth pianos and fat beats. Dreamy ambient atmosphere."
+- "Dark electronic music with ominous drone and glitchy effects. Unsettling and experimental."
+
+Music prompt for this scene:"""
+        
+        return prompt
+    
     async def analyze_frame(
         self, 
         frame_bytes: bytes, 
@@ -76,8 +114,8 @@ class GeminiAnalyzer:
             # Describe the image first
             description = await self.describe_image(frame_bytes)
             
-            # Generate composition notes using context
-            prompt = composition_context.generate_gemini_prompt(description)
+            # Generate composition notes using Lyria-optimized prompt
+            prompt = self._generate_lyria_optimized_prompt(description, composition_context)
             
             # Convert bytes to PIL Image
             image = self._bytes_to_image(frame_bytes)
@@ -138,21 +176,37 @@ class GeminiAnalyzer:
             old_image = self._bytes_to_image(old_frame_bytes)
             new_image = self._bytes_to_image(new_frame_bytes)
             
-            prompt = f"""You are analyzing two consecutive frames from a video to determine if the music should change.
+            state = composition_context.current_state
+            
+            prompt = f"""You are a music director analyzing scene changes for Lyria RealTime music generation.
 
-Video title: "{composition_context.video_title}"
+Video: "{composition_context.video_title}"
 
-Current musical state:
-- Mood: {composition_context.current_state['mood']}
-- Tempo: {composition_context.current_state['tempo']}
-- Intensity: {composition_context.current_state['intensity']}
+Current music:
+- Genre/Style: {state.get('genre', 'adaptive')}
+- Mood: {state['mood']}
+- Tempo: {state['tempo']}
+- Intensity: {state['intensity']}
 
-Compare these two frames and answer:
-1. What changed between them? (scene, action, mood)
+LYRIA MUSIC SYSTEM:
+Lyria creates real-time adaptive music using rich prompts with:
+- Specific instruments (Piano, Guitar, Synth Pads, Drums, Strings, etc.)
+- Musical genres (Cinematic, EDM, Jazz, Ambient, Rock, etc.)
+- Atmosphere descriptors (Dreamy, Energetic, Dark, Upbeat, Ethereal, etc.)
+- Musical qualities (Tight Groove, Rich Orchestration, Fat Beats, etc.)
+
+YOUR TASK:
+Compare Frame 1 (previous) vs Frame 2 (current):
+
+1. What changed in the scene? (action, mood, lighting, energy)
 2. Should the music change? (yes/no)
-3. If yes, what specific composition updates are needed? (2-3 sentences max)
+3. If YES: Provide a Lyria-optimized music prompt (2-3 sentences) that:
+   - Specifies concrete instruments and genre
+   - Uses vivid musical descriptors
+   - Smoothly transitions from current state
+   - Matches the new scene's mood and energy
 
-If the change is minor or the music is already appropriate, say "no change needed".
+If the change is minor or music is already appropriate, say "no change needed".
 
 Analysis:"""
 
@@ -193,11 +247,18 @@ Analysis:"""
         try:
             image = self._bytes_to_image(frame_bytes)
             
-            prompt = f"""Quick musical assessment for livestream.
-Video: "{composition_context.video_title}"
-Current: {composition_context.current_state['mood']} mood, {composition_context.current_state['tempo']} tempo
+            state = composition_context.current_state
+            
+            prompt = f"""Quick music update for livestream - Lyria RealTime system.
 
-In 1-2 sentences, describe what composition adjustments (if any) this scene needs:"""
+Video: "{composition_context.video_title}"
+Current: {state['mood']} mood, {state['tempo']} tempo
+
+Generate a concise Lyria music prompt (1-2 sentences) for this scene.
+Include: instruments, genre/style, and mood descriptors.
+Keep it smooth - no abrupt changes.
+
+Music prompt:"""
 
             response = await self.model.generate_content_async(
                 [image, prompt],

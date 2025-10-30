@@ -154,7 +154,7 @@ class CompositionContext:
     
     def get_initial_prompt(self) -> str:
         """Get initial prompt for starting Lyria (before first frame analysis)."""
-        return f'Generate background music for a video titled "{self.video_title}". Start with a neutral, adaptive composition.'
+        return 'Generate background music for a video. Start with a neutral, adaptive composition.'
     
     def reset(self, video_title: str = "") -> None:
         """Reset context for a new video."""
