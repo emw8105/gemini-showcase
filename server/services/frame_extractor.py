@@ -6,6 +6,9 @@ Extracts frames from YouTube videos with different strategies:
 - Recorded videos: Offset-based sampling throughout video
 
 Includes frame-diff comparison to avoid redundant analysis.
+
+CRITICAL DEPENDENCY: Requires yt-dlp >= 2025.10.22 for YouTube nsig decryption.
+Older versions will fail with 403 Forbidden errors on many videos.
 """
 
 import cv2
@@ -17,7 +20,7 @@ import tempfile
 import subprocess
 import imageio_ffmpeg
 import yt_dlp
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from datetime import datetime
 from skimage.metrics import structural_similarity as ssim
 
@@ -69,64 +72,148 @@ class FrameExtractor:
         print(f"[FrameExtractor] Ready to extract frames")
     
     async def extract_frame(self, video_url: str, timestamp_seconds: float = 0) -> bytes:
-        """Extract a single frame from a YouTube video at a specific timestamp using FFmpeg."""
+        """Extract a single frame from a YouTube video at a specific timestamp."""
         try:
             print(f"[FrameExtractor] Extracting frame from {video_url} at {timestamp_seconds}s")
             
-            # Get direct video URL using yt-dlp
-            ydl_opts = {
-                'format': 'best[ext=mp4]/best',
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-            }
+            # Try direct stream first (fast, no download)
+            stream_url = self._get_safe_stream_url(video_url)
             
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                video_stream_url = info['url']
+            if stream_url:
+                try:
+                    frame_bytes = await self._extract_frame_direct(stream_url, timestamp_seconds)
+                    print(f"[FrameExtractor] ✅ Direct stream succeeded")
+                    await self._save_screenshot(frame_bytes, f"recorded_{int(timestamp_seconds)}s", video_url)
+                    return frame_bytes
+                except Exception as e:
+                    print(f"[FrameExtractor] ⚠️ Direct stream failed: {e}")
+                    print(f"[FrameExtractor] Falling back to clip download...")
             
-            # Use FFmpeg to extract frame at specific timestamp
-            output_path = os.path.join(self.temp_dir, f"frame_{int(timestamp_seconds)}.png")
-            
-            # FFmpeg command to extract a single frame
-            cmd = [
-                self.ffmpeg_path,
-                '-ss', str(timestamp_seconds),  # Seek to timestamp
-                '-i', video_stream_url,          # Input URL
-                '-vframes', '1',                 # Extract 1 frame
-                '-f', 'image2',                  # Output as image
-                '-y',                            # Overwrite output file
-                output_path
-            ]
-            
-            # Run FFmpeg
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            
-            if result.returncode != 0:
-                raise Exception(f"FFmpeg error: {result.stderr}")
-            
-            # Read the extracted frame
-            if not os.path.exists(output_path):
-                raise Exception("Frame file not created")
-            
-            with open(output_path, 'rb') as f:
-                frame_bytes = f.read()
-            
-            # Clean up
-            os.remove(output_path)
-            
-            # Save screenshot for showcase
+            # Fallback: download short clip around timestamp
+            frame_bytes = await self._extract_frame_fallback(video_url, timestamp_seconds)
+            print(f"[FrameExtractor] ✅ Fallback succeeded")
             await self._save_screenshot(frame_bytes, f"recorded_{int(timestamp_seconds)}s", video_url)
-            
             return frame_bytes
             
         except Exception as e:
             print(f"[FrameExtractor] Error extracting frame: {e}")
+            raise
+    
+    def _get_safe_stream_url(self, video_url: str) -> str:
+        """
+        Return the highest-quality direct MP4 stream URL (no DASH/HLS).
+        
+        NOTE: This method relies on yt-dlp's ability to decrypt YouTube's nsig parameter.
+        With yt-dlp >= 2025.10.22, this works reliably even when nsig extraction shows warnings.
+        """
+        try:
+            ydl_opts = {"quiet": True}
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+            
+            formats = info.get("formats", [])
+            
+            # Filter for safe mp4 + http streams (no m3u8, no dash)
+            safe_formats = [
+                f for f in formats
+                if f.get("ext") == "mp4"
+                and "m3u8" not in f.get("url", "")
+                and "dash" not in f.get("protocol", "")
+                and f.get("height") is not None
+            ]
+            
+            if not safe_formats:
+                return None
+            
+            # Pick highest resolution
+            best = max(safe_formats, key=lambda f: f.get("height", 0))
+            print(f"[FrameExtractor] 📺 Selected stream: {best.get('format_note', '?')} ({best.get('height')}p)")
+            return best.get("url")
+            
+        except Exception as e:
+            print(f"[FrameExtractor] Failed to get safe stream URL: {e}")
+            return None
+    
+    async def _extract_frame_direct(self, stream_url: str, timestamp: float) -> bytes:
+        """Extract frame directly from stream URL (NO HEADERS - this is key!)."""
+        output_path = os.path.join(self.temp_dir, f"frame_{int(timestamp)}.jpg")
+        
+        # CRITICAL: Do NOT pass headers! This causes 403 errors
+        result = subprocess.run(
+            [
+                self.ffmpeg_path,
+                "-ss", str(timestamp),
+                "-i", stream_url,
+                "-frames:v", "1",
+                "-q:v", "2",
+                output_path,
+                "-y",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=20
+        )
+        
+        with open(output_path, 'rb') as f:
+            frame_bytes = f.read()
+        
+        os.remove(output_path)
+        return frame_bytes
+    
+    async def _extract_frame_fallback(self, video_url: str, timestamp: float) -> bytes:
+        """Fallback: Use yt-dlp's external downloader to get a video segment."""
+        output_path = os.path.join(self.temp_dir, f"frame_{int(timestamp)}.jpg")
+        
+        try:
+            print(f"[FrameExtractor] Attempting fallback with external downloader...")
+            
+            # Use yt-dlp with FFmpeg as external downloader to get a 3-second segment
+            ydl_opts = {
+                "quiet": True,
+                "format": "bestvideo[ext=mp4]/best[ext=mp4]/best",
+                "outtmpl": os.path.join(self.temp_dir, "temp_segment.%(ext)s"),
+                "external_downloader": "ffmpeg",
+                "external_downloader_args": {
+                    "ffmpeg_i": ["-ss", str(max(0, timestamp - 1)), "-t", "3"]
+                },
+                "ffmpeg_location": os.path.dirname(self.ffmpeg_path),
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+                downloaded_file = ydl.prepare_filename(info)
+            
+            # Extract frame from the downloaded segment (timestamp is around 1s in the clip)
+            subprocess.run(
+                [
+                    self.ffmpeg_path,
+                    "-ss", "1",
+                    "-i", downloaded_file,
+                    "-frames:v", "1",
+                    "-q:v", "2",
+                    output_path,
+                    "-y",
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=20
+            )
+            
+            # Clean up
+            if os.path.exists(downloaded_file):
+                os.remove(downloaded_file)
+            
+            with open(output_path, 'rb') as f:
+                frame_bytes = f.read()
+            
+            os.remove(output_path)
+            print(f"[FrameExtractor] ✅ Fallback succeeded")
+            return frame_bytes
+            
+        except Exception as e:
+            print(f"[FrameExtractor] Fallback failed: {e}")
             raise
     
     async def extract_livestream_frame(self, video_url: str) -> bytes:
@@ -144,18 +231,29 @@ class FrameExtractor:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(video_url, download=False)
                 video_stream_url = info['url']
+                http_headers = info.get('http_headers', {})
             
             # Use FFmpeg to capture current frame from livestream
             output_path = os.path.join(self.temp_dir, f"livestream_frame_{int(datetime.now().timestamp())}.png")
             
-            cmd = [
-                self.ffmpeg_path,
+            # Build FFmpeg command
+            cmd = [self.ffmpeg_path]
+            
+            # Add User-Agent header (critical for YouTube)
+            user_agent = http_headers.get('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            cmd.extend(['-user_agent', user_agent])
+            
+            # Add referer if present
+            if 'Referer' in http_headers:
+                cmd.extend(['-referer', http_headers['Referer']])
+            
+            cmd.extend([
                 '-i', video_stream_url,
                 '-vframes', '1',
                 '-f', 'image2',
                 '-y',
                 output_path
-            ]
+            ])
             
             result = subprocess.run(
                 cmd,
