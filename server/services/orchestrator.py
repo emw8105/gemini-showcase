@@ -247,7 +247,7 @@ class MusicGenerationOrchestrator:
         print(f"[Orchestrator] Starting recorded video processing for {session_id}")
         
         # Configuration for frame processing timing
-        first_frame_offset = 5  # Process first frame for 5s mark in video
+        first_frame_offset = 10  # Process first frame for 10s mark in video (gives time for initial music)
         frame_interval = 10  # Extract frame every 10 seconds of playback
         processing_buffer = 5  # Start processing N seconds before the frame's video time
         
@@ -280,6 +280,14 @@ class MusicGenerationOrchestrator:
                 if wait_time > 0:
                     print(f"[Orchestrator] ⏸️  Waiting {wait_time:.1f}s before processing frame at {playback_offset}s (scheduled for {target_processing_time:.1f}s real-time)")
                     await asyncio.sleep(wait_time)
+                    
+                    # Check if playback_offset was updated during the wait (user scrubbed)
+                    current_offset = session["playback_offset"]
+                    if current_offset != playback_offset:
+                        print(f"[Orchestrator] 🔄 Offset changed during wait: {playback_offset}s → {current_offset}s, recalculating...")
+                        playback_offset = current_offset
+                        playback_start_time = session["playback_start_time"]
+                        continue  # Skip this iteration and recalculate wait time
                 
                 frame_start = datetime.now()
                 
@@ -360,10 +368,25 @@ class MusicGenerationOrchestrator:
                 frame_total = (datetime.now() - frame_start).total_seconds()
                 print(f"[Orchestrator] ⏱️  Total time for frame {frame_count + 1}: {frame_total:.2f}s")
                 
-                # Move to next playback position
-                playback_offset += frame_interval
-                session["playback_offset"] = playback_offset
-                frame_count += 1
+                # Check if offset was updated during frame processing (user scrubbed)
+                current_offset = session["playback_offset"]
+                if current_offset != playback_offset:
+                    print(f"[Orchestrator] 🔄 Offset changed during processing: {playback_offset}s → {current_offset}s, jumping to new position")
+                    playback_offset = current_offset
+                    playback_start_time = session["playback_start_time"]  # Use new timeline
+                    frame_count += 1
+                    # Don't continue here - let it calculate next frame position first
+                
+                # Move to next playback position (unless we just jumped from a seek)
+                if current_offset == playback_offset:
+                    # Normal increment - no seek happened
+                    playback_offset += frame_interval
+                    session["playback_offset"] = playback_offset
+                    frame_count += 1
+                else:
+                    # We just jumped from a seek, calculate next frame from new position
+                    playback_offset = current_offset + frame_interval
+                    session["playback_offset"] = playback_offset
                 
                 # No fixed sleep - we'll wait at the start of next iteration based on scheduled time
                 
@@ -399,6 +422,47 @@ class MusicGenerationOrchestrator:
         print(f"[Orchestrator] User prompt applied to {session_id}")
         
         return {"success": True, "message": "Prompt applied"}
+    
+    async def update_playback_offset(self, session_id: str, new_offset: float) -> dict:
+        """
+        Update playback offset when user scrubs/seeks in the video.
+        Adjusts the playback timeline so that "now" corresponds to the new offset position.
+        
+        Args:
+            session_id: The session identifier
+            new_offset: New playback position in seconds (where user scrubbed to)
+        
+        Returns:
+            dict with success status and message
+        """
+        session = self.active_sessions.get(session_id)
+        
+        if not session:
+            raise Exception(f"Session {session_id} not found")
+        
+        old_offset = session.get("playback_offset", 0)
+        print(f"[Orchestrator] 🎯 Playback offset updated for {session_id}: {old_offset}s → {new_offset}s")
+        
+        # Update playback offset and adjust timeline
+        # Set playback_start_time so that "now" corresponds to new_offset
+        # This maintains the relationship: real_time_elapsed = video_offset
+        from datetime import timedelta
+        session["playback_offset"] = new_offset
+        session["playback_start_time"] = datetime.now() - timedelta(seconds=new_offset)
+        
+        # Log the scrubbing event
+        session_logger = session.get("session_logger")
+        if session_logger:
+            session_logger.log_event(f"User scrubbed: {old_offset}s → {new_offset}s")
+        
+        print(f"[Orchestrator] Timeline adjusted - frame processing will continue from {new_offset}s")
+        
+        return {
+            "success": True,
+            "message": f"Playback offset updated to {new_offset}s",
+            "old_offset": old_offset,
+            "new_offset": new_offset
+        }
     
     async def stop_music_generation(self, session_id: str):
         """Stop music generation for a session."""

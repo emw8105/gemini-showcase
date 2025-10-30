@@ -287,6 +287,21 @@
             </button>
         </div>
 
+        <div class="input-group">
+            <label for="seekOffset">🎯 Test Video Scrubbing (seconds)</label>
+            <input 
+                type="text" 
+                id="seekOffset" 
+                placeholder="e.g., 120 (jump to 2:00)"
+            />
+        </div>
+
+        <div class="button-group">
+            <button id="seekBtn" class="btn-secondary" onclick="sendSeek()" disabled>
+                Simulate Seek
+            </button>
+        </div>
+
         <div class="audio-viz" id="audioViz">
             <canvas id="visualizer"></canvas>
         </div>
@@ -329,6 +344,7 @@
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const promptBtn = document.getElementById('promptBtn');
+        const seekBtn = document.getElementById('seekBtn');
         const chunkCountEl = document.getElementById('chunkCount');
         const dataReceivedEl = document.getElementById('dataReceived');
 
@@ -390,6 +406,7 @@
                     startBtn.disabled = true;
                     stopBtn.disabled = true;
                     promptBtn.disabled = true;
+                    seekBtn.disabled = true;
                     sessionId = null;
                     sessionInfoEl.textContent = 'Session ID: Not connected';
                 };
@@ -411,6 +428,11 @@
                 // Heartbeat response
             } else if (data.type === 'prompt_received') {
                 log(`Prompt applied: "${data.prompt}"`, 'success');
+            } else if (data.type === 'seek_confirmed') {
+                log(`✅ Seek confirmed: Jumped to ${data.offset}s`, 'success');
+                if (data.result) {
+                    log(`   Old: ${data.result.old_offset}s → New: ${data.result.new_offset}s`, 'info');
+                }
             }
         }
 
@@ -578,6 +600,7 @@
                     startBtn.disabled = true;
                     stopBtn.disabled = false;
                     promptBtn.disabled = false;
+                    seekBtn.disabled = false;
                     
                     // Reset buffering state for new session
                     isBuffering = true;
@@ -618,6 +641,7 @@
                     startBtn.disabled = false;
                     stopBtn.disabled = true;
                     promptBtn.disabled = true;
+                    seekBtn.disabled = true;
                     
                     // Reset audio playback state
                     nextPlayTime = 0;
@@ -664,6 +688,43 @@
             }
         }
 
+        async function sendSeek() {
+            const offsetInput = document.getElementById('seekOffset').value.trim();
+
+            if (!offsetInput) {
+                log('Please enter a time offset (in seconds)', 'error');
+                return;
+            }
+
+            const offset = parseFloat(offsetInput);
+
+            if (isNaN(offset) || offset < 0) {
+                log('Please enter a valid positive number', 'error');
+                return;
+            }
+
+            if (!sessionId) {
+                log('Not connected to server', 'error');
+                return;
+            }
+
+            try {
+                log(`🎯 Simulating video seek to ${offset}s`, 'info');
+
+                // Send via WebSocket (faster than REST)
+                ws.send(JSON.stringify({
+                    type: 'seek',
+                    offset: offset
+                }));
+
+                document.getElementById('seekOffset').value = '';
+                log(`Seek request sent: ${offset}s`, 'success');
+
+            } catch (error) {
+                log(`Error sending seek: ${error.message}`, 'error');
+            }
+        }
+
         // Heartbeat
         setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -675,6 +736,12 @@
         document.getElementById('userPrompt').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendPrompt();
+            }
+        });
+
+        document.getElementById('seekOffset').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendSeek();
             }
         });
 

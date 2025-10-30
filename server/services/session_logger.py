@@ -52,6 +52,11 @@ class SessionLogger:
             f.write(f"{user_prompt}\n")
             f.write("=" * 60 + "\n")
     
+    def log_event(self, event: str):
+        """Log a general event (e.g., scrubbing, state changes)."""
+        with open(self.log_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n[{datetime.now().strftime('%H:%M:%S')}] EVENT: {event}\n")
+    
     def log_session_end(self):
         """Log session completion."""
         with open(self.log_file, 'a', encoding='utf-8') as f:

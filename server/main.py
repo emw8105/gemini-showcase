@@ -98,6 +98,11 @@ class UserPromptRequest(BaseModel):
     prompt: str
 
 
+class SeekRequest(BaseModel):
+    session_id: str
+    offset: float  # New playback position in seconds
+
+
 class StopMusicRequest(BaseModel):
     session_id: str
 
@@ -175,6 +180,20 @@ async def add_user_prompt(request: UserPromptRequest):
         raise HTTPException(status_code=500, detail=f"Failed to apply prompt: {str(e)}")
 
 
+@app.post("/api/music/seek")
+async def seek_playback(request: SeekRequest):
+    """
+    Update playback offset when user scrubs/seeks in the video.
+    This resets the timeline so frame processing aligns with the new position.
+    """
+    try:
+        print(f"[API] Seek request: session={request.session_id}, offset={request.offset}s")
+        result = await orchestrator.update_playback_offset(request.session_id, request.offset)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update playback offset: {str(e)}")
+
+
 @app.post("/api/music/stop")
 async def stop_music(request: StopMusicRequest):
     """Stop music generation for a session."""
@@ -236,6 +255,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "prompt_received",
                     "prompt": data["prompt"]
+                })
+            
+            elif message_type == "seek":
+                # Handle video scrubbing/seeking
+                offset = data.get("offset", 0)
+                result = await orchestrator.update_playback_offset(session_id, offset)
+                await websocket.send_json({
+                    "type": "seek_confirmed",
+                    "offset": offset,
+                    "result": result
                 })
                 
             else:
