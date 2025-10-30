@@ -278,3 +278,53 @@ Music prompt:"""
         except Exception as e:
             print(f"[GeminiAnalyzer] Error in quick analysis: {e}")
             raise
+    
+    async def analyze_video_metadata(self, video_info: Dict) -> str:
+        """
+        Quick text-only analysis of video metadata to generate initial music prompt.
+        Fast (text-only, low tokens) for immediate music generation before first frame.
+        """
+        if not self.model:
+            # Fallback if no API key
+            return "ambient instrumental background music"
+        
+        try:
+            title = video_info.get('title', 'Unknown')
+            author = video_info.get('author', 'Unknown')
+            is_live = video_info.get('is_live', False)
+            
+            prompt = f"""Generate an initial music prompt for Lyria RealTime based on this video metadata:
+
+Title: "{title}"
+Author: {author}
+Type: {"Livestream" if is_live else "Recorded video"}
+
+TASK: Create a Lyria-optimized music prompt (2 sentences max) that:
+- Matches the likely content/mood based on the title and author
+- Specifies instruments, genre, and atmosphere
+- Is appropriate for {"live broadcast" if is_live else "pre-recorded content"}
+
+Examples:
+- Gaming stream → "Energetic electronic music with synth pads and driving beats. Upbeat gaming atmosphere."
+- Nature documentary → "Peaceful ambient music with acoustic instruments. Calm and contemplative mood."
+- Tech tutorial → "Clean minimal electronic background. Focused and professional atmosphere."
+
+Music prompt:"""
+
+            response = await self.model.generate_content_async(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=96,  # Low tokens for speed
+                )
+            )
+            
+            initial_prompt = response.text.strip()
+            print(f"[GeminiAnalyzer] Generated initial prompt from metadata: {initial_prompt}")
+            
+            return initial_prompt
+            
+        except Exception as e:
+            print(f"[GeminiAnalyzer] Error analyzing metadata: {e}")
+            # Fallback to generic prompt
+            return "ambient instrumental background music"

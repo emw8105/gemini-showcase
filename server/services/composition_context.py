@@ -92,27 +92,34 @@ class CompositionContext:
             self.current_state["intensity"] = "fading"
     
     def generate_lyria_prompt(self, new_analysis: Optional[str] = None) -> str:
-        """Generate a prompt for Lyria based on current context."""
+        """
+        Generate a prompt for Lyria based on current context.
+        
+        IMPORTANT: Does NOT include video title to avoid Lyria content filtering.
+        Video titles often contain copyrighted content (artist names, song titles)
+        which will cause Lyria to reject the prompt.
+        """
         parts = []
         
-        # Base context from video title
-        if self.video_title:
-            parts.append(f"Music for: {self.video_title}")
+        # DO NOT include video title - causes content filtering for copyrighted content
+        # (e.g., "Rick Astley - Never Gonna Give You Up" triggers filtering)
         
         # User preferences (highest priority)
         if self.user_prompts:
             user_prefs = ". ".join([p.text for p in self.user_prompts])
             parts.append(f"User requests: {user_prefs}")
         
-        # Current state
-        state = self.current_state
-        parts.append(
-            f"Current: {state['mood']} mood, {state['tempo']} tempo, {state['intensity']} intensity"
-        )
-        
-        # New analysis if provided
+        # New analysis is the most important - put it first
         if new_analysis:
-            parts.append(f"Scene update: {new_analysis}")
+            parts.append(new_analysis)
+        
+        # Only add current state if we don't have new analysis
+        # (new analysis already contains musical direction)
+        elif not new_analysis:
+            state = self.current_state
+            parts.append(
+                f"{state['mood']} mood, {state['tempo']} tempo, {state['intensity']} intensity"
+            )
         
         return ". ".join(parts) + "."
     
@@ -152,8 +159,18 @@ class CompositionContext:
         
         return prompt
     
-    def get_initial_prompt(self) -> str:
-        """Get initial prompt for starting Lyria (before first frame analysis)."""
+    def get_initial_prompt(self, metadata_prompt: str = None) -> str:
+        """
+        Get initial prompt for starting Lyria.
+        
+        Args:
+            metadata_prompt: Optional prompt generated from video metadata analysis.
+                           If provided, uses this instead of generic fallback.
+        """
+        if metadata_prompt:
+            return metadata_prompt
+        
+        # Fallback to generic prompt
         return 'Generate background music for a video. Start with a neutral, adaptive composition.'
     
     def reset(self, video_title: str = "") -> None:

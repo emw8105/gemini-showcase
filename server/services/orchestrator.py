@@ -55,13 +55,17 @@ class MusicGenerationOrchestrator:
         Returns immediately after starting - processing continues in background.
         """
         try:
-            print(f"[Orchestrator] Starting music generation for session {session_id}")
+            start_time = datetime.now()
+            print(f"[Orchestrator] ⏱️  Starting music generation for session {session_id}")
             
             if not self.is_initialized:
                 raise Exception("Orchestrator not initialized")
             
             # Get video info
+            t0 = datetime.now()
             video_info = await self.frame_extractor.get_video_info(video_url)
+            t1 = datetime.now()
+            print(f"[Orchestrator] ⏱️  Video info retrieved in {(t1-t0).total_seconds():.2f}s")
             print(f"[Orchestrator] Video info: {video_info}")
             
             # Create composition context
@@ -72,21 +76,44 @@ class MusicGenerationOrchestrator:
             print(f"[Orchestrator] Session log: {session_logger.get_log_path()}")
             
             # Acquire Lyria connection from pool (pre-warmed, instant)
+            t0 = datetime.now()
             lyria_connection = await self.lyria_pool.acquire_connection(session_id)
+            t1 = datetime.now()
+            print(f"[Orchestrator] ⏱️  Lyria connection acquired in {(t1-t0).total_seconds():.2f}s")
             
             # Set up audio data handler to relay to client
+            first_audio_received = [False]  # Track first audio chunk
+            first_audio_time = [None]
+            
             async def relay_audio(audio_data):
                 try:
+                    if not first_audio_received[0]:
+                        first_audio_received[0] = True
+                        first_audio_time[0] = datetime.now()
+                        elapsed = (first_audio_time[0] - start_time).total_seconds()
+                        print(f"[Orchestrator] 🎵 First audio chunk received in {elapsed:.2f}s from start")
                     await client_websocket.send_bytes(audio_data)
                 except Exception as e:
                     print(f"[Orchestrator] Error relaying audio: {e}")
             
             lyria_connection.on_audio_data = relay_audio
             
-            # Start Lyria immediately with title-based prompt
-            initial_prompt = composition_context.get_initial_prompt()
-            await lyria_connection.start(initial_prompt)
+            # Generate initial music prompt from video metadata (fast, text-only)
+            print(f"[Orchestrator] Analyzing video metadata for initial music...")
+            t0 = datetime.now()
+            metadata_prompt = await self.gemini_analyzer.analyze_video_metadata(video_info)
+            t1 = datetime.now()
+            print(f"[Orchestrator] ⏱️  Metadata analysis completed in {(t1-t0).total_seconds():.2f}s")
             
+            # Start Lyria with metadata-based prompt (unique for each video)
+            t0 = datetime.now()
+            initial_prompt = composition_context.get_initial_prompt(metadata_prompt)
+            await lyria_connection.start(initial_prompt)
+            t1 = datetime.now()
+            print(f"[Orchestrator] ⏱️  Lyria started in {(t1-t0).total_seconds():.2f}s")
+            
+            total_startup = (t1 - start_time).total_seconds()
+            print(f"[Orchestrator] ✅ Music generation ready in {total_startup:.2f}s total")
             print(f"[Orchestrator] Music started for session {session_id}")
             
             # Store session data
@@ -227,28 +254,38 @@ class MusicGenerationOrchestrator:
         
         previous_frame = None
         
-        for timestamp in timestamps:
+        for idx, timestamp in enumerate(timestamps):
             if not session["is_active"]:
                 break
             
             try:
+                frame_start = datetime.now()
+                
                 # Extract frame at timestamp
+                t0 = datetime.now()
                 current_frame = await self.frame_extractor.extract_frame(video_url, timestamp)
+                t1 = datetime.now()
+                print(f"[Orchestrator] ⏱️  Frame {idx+1}/{len(timestamps)} extracted in {(t1-t0).total_seconds():.2f}s")
                 
                 if previous_frame:
                     # Compare frames
+                    t0 = datetime.now()
                     difference = await self.frame_extractor.compare_frames(previous_frame, current_frame)
+                    t1 = datetime.now()
                     
                     if difference > self.frame_extractor.frame_diff_threshold:
-                        print(f"[Orchestrator] Scene change detected at {timestamp}s in {session_id}")
+                        print(f"[Orchestrator] Scene change detected at {timestamp}s (diff: {difference:.1f}%)")
                         
                         # Query Gemini for analysis
                         print(f"[Orchestrator] Querying Gemini for frame delta analysis...")
+                        t0 = datetime.now()
                         delta_analysis = await self.gemini_analyzer.analyze_frame_delta(
                             previous_frame,
                             current_frame,
                             composition_context
                         )
+                        t1 = datetime.now()
+                        print(f"[Orchestrator] ⏱️  Gemini delta analysis completed in {(t1-t0).total_seconds():.2f}s")
                         
                         # Log to session file
                         session_logger = session["session_logger"]
@@ -257,36 +294,43 @@ class MusicGenerationOrchestrator:
                         print(f"[Orchestrator] Received analysis from Gemini (needs_change={delta_analysis['needs_change']})")
                         
                         if delta_analysis["needs_change"]:
+                            t0 = datetime.now()
                             composition_context.update_from_analysis(delta_analysis["analysis"])
                             
                             new_prompt = composition_context.generate_lyria_prompt(delta_analysis["analysis"])
                             await lyria_connection.update_prompt(new_prompt)
+                            t1 = datetime.now()
+                            print(f"[Orchestrator] ⏱️  Prompt updated in {(t1-t0).total_seconds():.2f}s")
                             
                             session_logger.log_prompt_update(new_prompt)
-                            print(f"[Orchestrator] Updated composition at {timestamp}s")
-                            
-                            new_prompt = composition_context.generate_lyria_prompt(delta_analysis["analysis"])
-                            await lyria_connection.update_prompt(new_prompt)
-                            
                             print(f"[Orchestrator] Updated composition at {timestamp}s")
                 else:
                     # First frame
                     print(f"[Orchestrator] Analyzing initial frame at {timestamp}s")
+                    t0 = datetime.now()
                     analysis = await self.gemini_analyzer.analyze_frame(current_frame, composition_context)
+                    t1 = datetime.now()
+                    print(f"[Orchestrator] ⏱️  Initial frame analysis completed in {(t1-t0).total_seconds():.2f}s")
                     
                     # Log to session file
                     session_logger = session["session_logger"]
                     session_logger.log_frame_analysis(timestamp, "Initial Analysis", analysis["composition_notes"])
                     
+                    t0 = datetime.now()
                     composition_context.update_from_analysis(analysis["composition_notes"])
                     
                     new_prompt = composition_context.generate_lyria_prompt(analysis["composition_notes"])
                     await lyria_connection.update_prompt(new_prompt)
+                    t1 = datetime.now()
+                    print(f"[Orchestrator] ⏱️  Initial prompt updated in {(t1-t0).total_seconds():.2f}s")
                     
                     session_logger.log_prompt_update(new_prompt)
                     print(f"[Orchestrator] Initial analysis complete for {session_id}")
                 
                 previous_frame = current_frame
+                
+                frame_total = (datetime.now() - frame_start).total_seconds()
+                print(f"[Orchestrator] ⏱️  Total time for frame {idx+1}: {frame_total:.2f}s")
                 
                 # Wait a bit before processing next frame
                 await asyncio.sleep(2)
@@ -294,7 +338,7 @@ class MusicGenerationOrchestrator:
             except Exception as e:
                 print(f"[Orchestrator] Error processing frame at {timestamp}s: {e}")
         
-        print(f"[Orchestrator] Finished processing all frames for {session_id}")
+        print(f"[Orchestrator] ✅ Finished processing all {len(timestamps)} frames for {session_id}")
     
     async def handle_user_prompt(self, session_id: str, user_prompt: str) -> dict:
         """Handle user prompt."""

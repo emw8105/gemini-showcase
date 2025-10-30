@@ -107,8 +107,13 @@ class LyriaConnection:
             if not self.ws:
                 return
             
+            print(f"[LyriaConnection] {self.id} receive task started, waiting for messages...")
+            
             async for message in self.ws:
                 data = json.loads(message)
+                
+                # Debug: Log all messages from Lyria
+                print(f"[LyriaConnection] {self.id} received message: {json.dumps(data)[:200]}")
                 
                 # Handle filtered prompts (content policy violations)
                 if "filteredPrompt" in data:
@@ -150,7 +155,7 @@ class LyriaConnection:
     
     async def start(self, initial_prompt: str, bpm: int = 120, temperature: float = 1.0):
         """Start music generation with initial prompt."""
-        # Sanitize prompt to avoid filtering
+        # Sanitize prompt to avoid filtering (remove copyrighted content references)
         sanitized_prompt = sanitize_prompt_for_lyria(initial_prompt)
         print(f"[LyriaConnection] {self.id} starting with prompt: {sanitized_prompt}")
         
