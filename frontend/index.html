@@ -256,7 +256,7 @@
                 type="text" 
                 id="videoUrl" 
                 placeholder="https://www.youtube.com/watch?v=..."
-                value="https://www.youtube.com/watch?v=z9Ug-3qhrwY&t=1s"
+                value="https://www.youtube.com/watch?v=z9Ug-3qhrwY"
             />
         </div>
 
@@ -317,6 +317,9 @@
         let chunkCount = 0;
         let totalBytes = 0;
         let nextPlayTime = 0; // Track when next chunk should play
+        let isBuffering = true; // Start in buffering state
+        let bufferTargetSeconds = 1.5; // Aim for 1.5 seconds of audio buffered
+        let bufferedDuration = 0; // Track how much audio we have buffered
 
         // UI Elements
         const statusEl = document.getElementById('status');
@@ -424,6 +427,10 @@
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 log('Audio context initialized', 'success');
+                // Reset buffering state when starting fresh
+                isBuffering = true;
+                bufferedDuration = 0;
+                nextPlayTime = 0;
             }
 
             // Decode raw PCM audio from Lyria
@@ -455,23 +462,55 @@
                     }
                 }
                 
+                const chunkDuration = audioBuffer.duration;
+                
+                // Buffer management: Only start playback when we have enough buffered
+                if (isBuffering) {
+                    bufferedDuration += chunkDuration;
+                    log(`Buffering... ${bufferedDuration.toFixed(2)}s / ${bufferTargetSeconds}s`, 'info');
+                    
+                    if (bufferedDuration >= bufferTargetSeconds || chunkCount >= 3) {
+                        // We have enough buffer, start playback!
+                        isBuffering = false;
+                        nextPlayTime = audioContext.currentTime + 0.1; // Small delay to ensure smooth start
+                        log(`Buffer ready! Starting playback with ${bufferedDuration.toFixed(2)}s buffered`, 'success');
+                        updateStatus('🎵 Playing - Audio buffered and streaming', 'playing');
+                    }
+                }
+                
                 // Play the audio with buffering
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
                 
-                // Schedule playback to ensure smooth continuous audio
-                const currentTime = audioContext.currentTime;
-                const startTime = Math.max(currentTime, nextPlayTime);
-                source.start(startTime);
-                
-                // Update next play time for seamless playback
-                nextPlayTime = startTime + audioBuffer.duration;
+                if (!isBuffering) {
+                    // Schedule playback to ensure smooth continuous audio
+                    const currentTime = audioContext.currentTime;
+                    const startTime = Math.max(currentTime, nextPlayTime);
+                    source.start(startTime);
+                    
+                    // Update next play time for seamless playback
+                    nextPlayTime = startTime + chunkDuration;
 
-                log(`Playing ${numFrames} frames (${(numFrames / sampleRate).toFixed(2)}s) at ${startTime.toFixed(2)}s`, 'audio');
+                    log(`Playing ${numFrames} frames (${chunkDuration.toFixed(2)}s) at ${startTime.toFixed(2)}s`, 'audio');
+                } else {
+                    // Still buffering, queue the source for later playback
+                    // We'll play it once buffering is complete
+                    const startTime = nextPlayTime || (audioContext.currentTime + 0.1);
+                    source.start(startTime);
+                    nextPlayTime = startTime + chunkDuration;
+                }
 
                 // Simple visualization
                 visualizeAudio(audioBuffer);
+                
+                // Monitor buffer health
+                const bufferHealth = (nextPlayTime - audioContext.currentTime);
+                if (bufferHealth < 0.5 && !isBuffering) {
+                    log(`⚠️ Buffer running low: ${bufferHealth.toFixed(2)}s`, 'error');
+                } else if (!isBuffering) {
+                    log(`Buffer health: ${bufferHealth.toFixed(2)}s ahead`, 'info');
+                }
                 
             } catch (error) {
                 log(`Audio processing error: ${error.message}`, 'error');
@@ -534,11 +573,16 @@
                 if (result.success) {
                     log(`Music started! Video: ${result.video_info.title}`, 'success');
                     log(`Duration: ${result.video_info.duration}s, Live: ${result.video_info.is_live}`, 'info');
-                    updateStatus('🎵 Playing - Listening for audio...', 'playing');
+                    updateStatus('🎵 Buffering audio...', 'playing');
                     
                     startBtn.disabled = true;
                     stopBtn.disabled = false;
                     promptBtn.disabled = false;
+                    
+                    // Reset buffering state for new session
+                    isBuffering = true;
+                    bufferedDuration = 0;
+                    nextPlayTime = 0;
                 } else {
                     log('Failed to start music', 'error');
                     updateStatus('❌ Failed to start', 'connected');
@@ -579,6 +623,8 @@
                     nextPlayTime = 0;
                     chunkCount = 0;
                     totalBytes = 0;
+                    isBuffering = true;
+                    bufferedDuration = 0;
                     chunkCountEl.textContent = '0';
                     dataReceivedEl.textContent = '0 KB';
                 }

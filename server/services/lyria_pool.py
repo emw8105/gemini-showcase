@@ -113,7 +113,8 @@ class LyriaConnection:
                 data = json.loads(message)
                 
                 # Debug: Log all messages from Lyria
-                print(f"[LyriaConnection] {self.id} received message: {json.dumps(data)[:200]}")
+                # print(f"[LyriaConnection] {self.id} received message: {json.dumps(data)[:200]}")
+                print(f"[LyriaConnection] {self.id} received {len(message)} bytes")
                 
                 # Handle filtered prompts (content policy violations)
                 if "filteredPrompt" in data:
