@@ -101,7 +101,10 @@ class FrameExtractor:
     
     def _get_safe_stream_url(self, video_url: str) -> str:
         """
-        Return the highest-quality direct MP4 stream URL (no DASH/HLS).
+        Return a direct MP4 stream URL (no DASH/HLS)
+        
+        Prefers average video qualities (720, 480) as it provides sufficient quality for Gemini scene analysis
+        while being significantly faster to download and process than 1080p/2160p.
         
         NOTE: This method relies on yt-dlp's ability to decrypt YouTube's nsig parameter.
         With yt-dlp >= 2025.10.22, this works reliably even when nsig extraction shows warnings.
@@ -125,9 +128,20 @@ class FrameExtractor:
             if not safe_formats:
                 return None
             
-            # Pick highest resolution
+            # Prefer 720p for optimal performance/quality balance
+            # Order of preference: 720p -> 480p -> 1080p -> highest available
+            target_heights = [720, 480, 1080]
+            
+            for target_height in target_heights:
+                matching = [f for f in safe_formats if f.get("height") == target_height]
+                if matching:
+                    best = matching[0]
+                    print(f"[FrameExtractor] 📺 Selected stream: {best.get('format_note', '?')} ({best.get('height')}p) [target: 720p]")
+                    return best.get("url")
+            
+            # Fallback to highest resolution if no preferred resolutions available
             best = max(safe_formats, key=lambda f: f.get("height", 0))
-            print(f"[FrameExtractor] 📺 Selected stream: {best.get('format_note', '?')} ({best.get('height')}p)")
+            print(f"[FrameExtractor] 📺 Selected stream: {best.get('format_note', '?')} ({best.get('height')}p) [fallback]")
             return best.get("url")
             
         except Exception as e:
