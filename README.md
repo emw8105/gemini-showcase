@@ -4,13 +4,23 @@ Real-time AI music generation synchronized with video playback using Google's Ge
 
 ## Overview
 
-This application analyzes video content in real-time and generates adaptive music that responds to visual changes. It features:
+This application analyzes video content in real-time and generates adaptive music that responds to visual changes. It's the **world's first live video-to-music generator** that works with YouTube videos, livestreams, and uploaded files—creating custom soundtracks as content unfolds in real time.
+
+### What Makes This Special?
+
+**Livestream Support**: Unlike traditional music generation that works in post-production with unlimited time, this system generates music for **never-before-seen content** as it happens live. Whether it's a Twitch stream, YouTube premiere, or live event, the AI composes original music in real-time, adapting to visual changes as they occur.
+
+**User-Guided Composition**: Viewers can shape the music with natural language prompts like "Add a violin," "Make it sound like Hans Zimmer," or "Switch to EDM." These preferences persist across the entire session, creating a personalized soundtrack experience.
+
+### Key Features
 
 - **Sub-2-second cold start** using pre-warmed Lyria connections
+- **Livestream support** for real-time music generation on never-before-seen content
 - **Real-time synchronization** between video playback and music generation
-- **Video scrubbing support** for seamless seeking
+- **Video scrubbing support** for seamless seeking on recorded content
 - **Adaptive composition** that evolves with visual content
-- **User prompt persistence** across all music updates
+- **Natural language control** with persistent user prompts
+- **Infinite streaming** via WebSocket-based Lyria RealTime connection
 
 ## Quick Start
 
@@ -107,20 +117,33 @@ pip install -U yt-dlp
    - Analyze video metadata (title, description)
    - Start music generation with metadata-based prompt
 
-2. **Sequential Frame Processing**
+2. **Frame Processing** (Adaptive strategy based on content type)
+   
+   **For Recorded Videos:**
    - Extract frames every 10 seconds of video time
-   - Process 5 seconds ahead of playback
-   - Gemini analyzes visual changes
+   - Process 5 seconds ahead of playback for synchronization
+   - Gemini analyzes visual changes between frames
    - Update Lyria prompt when significant changes detected
+   
+   **For Livestreams:**
+   - Capture periodic snapshots from live feed
+   - Detect significant visual changes in real-time
+   - Generate music for never-before-seen content as it happens
+   - No playback synchronization needed—music adapts to stream
 
 3. **Audio Streaming**
-   - Lyria generates 4-second audio chunks
+   - Lyria generates 4-second audio chunks continuously
    - Stream directly to frontend via WebSocket
-   - Buffer maintains continuous playback
+   - Buffer maintains uninterrupted playback
+   - Infinite generation—stream runs as long as video plays
 
 ## Playback Synchronization
 
-### Frame Processing Schedule
+The system uses different strategies for recorded videos vs. livestreams:
+
+### Recorded Videos: Playback-Synchronized Processing
+
+For recorded content, frame processing is scheduled to align with video playback position.
 
 ```python
 # Configuration
@@ -141,9 +164,36 @@ processing_buffer = 5      # Start processing 5s before frame time
 - Music ready 1-2 seconds after video reaches that point
 - Consistent timing throughout playback
 - No frame skipping or rush processing
+- Scrubbing support for instant seeking
+
+### Livestreams: Real-Time Adaptive Processing
+
+For livestreams, the system captures the current frame at regular intervals and adapts music to what's happening *right now*.
+
+```python
+# Configuration
+livestream_interval = 5  # Capture snapshot every 5 seconds
+```
+
+**How It Works:**
+1. **Capture current frame** from live feed (no offset needed)
+2. **Detect significant changes** using visual comparison
+3. **Analyze with Gemini** when scene changes detected
+4. **Update music prompt** to match new visual context
+5. **Repeat continuously** for infinite real-time generation
+
+**Why This Matters:**
+Unlike recorded videos where content is known in advance, **livestreams present never-before-seen content**. The AI must analyze and compose music for scenes that don't exist yet, making this true real-time adaptive music generation.
+
+**Example Use Cases:**
+- Live sports events (music adapts to game intensity)
+- Twitch gaming streams (music matches gameplay action)
+- Live concerts (AI generates complementary ambient music)
+- Breaking news (music reflects story tone and urgency)
 
 ### Example Logs
 
+**Recorded Video Processing:**
 ```
 [Orchestrator] 🎬 Video playback started at 04:34:14.645
 [Orchestrator] Frame schedule: First frame at 10s, then every 10s
@@ -157,9 +207,23 @@ processing_buffer = 5      # Start processing 5s before frame time
 [Orchestrator] 📊 Real-time: 21.1s | Video time: 20s | Delta: +1.1s
 ```
 
+**Livestream Processing:**
+```
+[Orchestrator] Starting livestream processing for session abc123
+[Orchestrator] Analyzing initial livestream frame
+[Orchestrator] Initial frame analysis complete
+
+[Orchestrator] Significant change detected in livestream
+[Orchestrator] Querying Gemini for frame delta analysis...
+[Orchestrator] Received analysis from Gemini (needs_change=True)
+[Orchestrator] Updated Lyria prompt for livestream
+```
+
 ## Video Scrubbing API
 
-Users can seek/scrub in the video, and the backend immediately adapts to the new position.
+For **recorded videos**, users can seek/scrub to any position and the backend immediately adapts to the new timeline.
+
+**Note:** Scrubbing is not applicable to livestreams, as they represent real-time content without a seekable timeline.
 
 ### REST API
 
@@ -390,16 +454,25 @@ LOG_LEVEL=INFO
 **In `orchestrator.py`:**
 
 ```python
-# Frame processing timing
+# Recorded video processing timing
 first_frame_offset = 10   # First frame video time (seconds)
 frame_interval = 10        # Frame interval (seconds)
 processing_buffer = 5      # Processing buffer (seconds)
+
+# Livestream processing timing
+livestream_interval = 5    # Snapshot interval for live content (seconds)
 ```
 
 **Recommendations:**
-- **Increase `processing_buffer`** (e.g., 7s) if analysis is slow
-- **Decrease `first_frame_offset`** (e.g., 5s) to analyze earlier
-- **Increase `frame_interval`** (e.g., 15s) for long videos
+- **For recorded videos:**
+  - Increase `processing_buffer` (e.g., 7s) if analysis is slow
+  - Decrease `first_frame_offset` (e.g., 5s) to analyze earlier
+  - Increase `frame_interval` (e.g., 15s) for long videos
+  
+- **For livestreams:**
+  - Decrease `livestream_interval` (e.g., 3s) for faster-paced content
+  - Increase `livestream_interval` (e.g., 10s) for slower-paced streams
+  - Balance between responsiveness and API quota usage
 
 ## Troubleshooting
 
