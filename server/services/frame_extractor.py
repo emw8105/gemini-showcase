@@ -20,7 +20,7 @@ import tempfile
 import subprocess
 import imageio_ffmpeg
 import yt_dlp
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List
 from datetime import datetime
 from skimage.metrics import structural_similarity as ssim
 

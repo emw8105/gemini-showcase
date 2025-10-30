@@ -10,9 +10,9 @@ Manages the flow from video selection to audio streaming:
 """
 
 import asyncio
-from typing import Dict, Optional
+from typing import Dict
 from datetime import datetime
-from services.lyria_pool import LyriaConnectionPool, LyriaConnection
+from services.lyria_pool import LyriaConnectionPool
 from services.composition_context import CompositionContext
 from services.gemini_analyzer import GeminiAnalyzer
 from services.frame_extractor import FrameExtractor

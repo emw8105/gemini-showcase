@@ -5,7 +5,6 @@ Creates individual log files for each session to track Gemini's
 frame analysis without cluttering the main server logs.
 """
 
-import os
 from datetime import datetime
 from pathlib import Path
 
