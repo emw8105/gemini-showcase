@@ -237,7 +237,7 @@ class MusicGenerationOrchestrator:
                 await asyncio.sleep(self.frame_extractor.livestream_interval)
     
     async def _process_recorded_video(self, session: dict):
-        """Process recorded video with offset-based sampling."""
+        """Process recorded video with sequential playback tracking."""
         session_id = session["session_id"]
         video_url = session["video_url"]
         video_info = session["video_info"]
@@ -246,26 +246,54 @@ class MusicGenerationOrchestrator:
         
         print(f"[Orchestrator] Starting recorded video processing for {session_id}")
         
-        # Calculate timestamps to sample
-        duration = video_info["duration"]
-        timestamps = self.frame_extractor.calculate_frame_timestamps(duration)
+        # Configuration for frame processing timing
+        first_frame_offset = 5  # Process first frame for 5s mark in video
+        frame_interval = 10  # Extract frame every 10 seconds of playback
+        processing_buffer = 5  # Start processing N seconds before the frame's video time
         
-        print(f"[Orchestrator] Will sample {len(timestamps)} frames from {duration}s video")
+        duration = video_info["duration"]
+        print(f"[Orchestrator] Frame schedule: First frame at {first_frame_offset}s, then every {frame_interval}s")
+        print(f"[Orchestrator] Processing buffer: {processing_buffer}s before each frame's video time")
         
         previous_frame = None
+        frame_count = 0
         
-        for idx, timestamp in enumerate(timestamps):
-            if not session["is_active"]:
-                break
-            
+        # Store playback start time to track real-time alignment
+        playback_start_time = datetime.now()
+        session["playback_start_time"] = playback_start_time
+        print(f"[Orchestrator] 🎬 Video playback started at {playback_start_time.strftime('%H:%M:%S.%f')[:-3]}")
+        
+        # Calculate playback offset for first frame
+        playback_offset = first_frame_offset
+        session["playback_offset"] = playback_offset
+        
+        while session["is_active"] and playback_offset < duration:
             try:
+                # Calculate when we should START processing this frame
+                # (processing_buffer seconds before the frame's video timestamp)
+                target_processing_time = playback_offset - processing_buffer
+                
+                # Wait until it's time to process this frame
+                real_time_elapsed = (datetime.now() - playback_start_time).total_seconds()
+                wait_time = target_processing_time - real_time_elapsed
+                
+                if wait_time > 0:
+                    print(f"[Orchestrator] ⏸️  Waiting {wait_time:.1f}s before processing frame at {playback_offset}s (scheduled for {target_processing_time:.1f}s real-time)")
+                    await asyncio.sleep(wait_time)
+                
                 frame_start = datetime.now()
                 
-                # Extract frame at timestamp
+                # Extract frame at current playback position
                 t0 = datetime.now()
-                current_frame = await self.frame_extractor.extract_frame(video_url, timestamp)
+                current_frame = await self.frame_extractor.extract_frame(video_url, playback_offset)
                 t1 = datetime.now()
-                print(f"[Orchestrator] ⏱️  Frame {idx+1}/{len(timestamps)} extracted in {(t1-t0).total_seconds():.2f}s")
+                
+                # Calculate real-time elapsed since playback started
+                real_time_elapsed = (t1 - playback_start_time).total_seconds()
+                time_delta = real_time_elapsed - playback_offset  # How far behind/ahead we are
+                
+                print(f"[Orchestrator] ⏱️  Frame {frame_count + 1} extracted in {(t1-t0).total_seconds():.2f}s (playback: {playback_offset}s / {duration}s)")
+                print(f"[Orchestrator] 📊 Real-time: {real_time_elapsed:.1f}s | Video time: {playback_offset}s | Delta: {time_delta:+.1f}s")
                 
                 if previous_frame:
                     # Compare frames
@@ -274,7 +302,7 @@ class MusicGenerationOrchestrator:
                     t1 = datetime.now()
                     
                     if difference > self.frame_extractor.frame_diff_threshold:
-                        print(f"[Orchestrator] Scene change detected at {timestamp}s (diff: {difference:.1f}%)")
+                        print(f"[Orchestrator] Scene change detected at {playback_offset}s (diff: {difference:.1f}%)")
                         
                         # Query Gemini for analysis
                         print(f"[Orchestrator] Querying Gemini for frame delta analysis...")
@@ -289,7 +317,7 @@ class MusicGenerationOrchestrator:
                         
                         # Log to session file
                         session_logger = session["session_logger"]
-                        session_logger.log_frame_analysis(timestamp, "Delta Analysis", delta_analysis["analysis"])
+                        session_logger.log_frame_analysis(playback_offset, "Delta Analysis", delta_analysis["analysis"])
                         
                         print(f"[Orchestrator] Received analysis from Gemini (needs_change={delta_analysis['needs_change']})")
                         
@@ -303,10 +331,10 @@ class MusicGenerationOrchestrator:
                             print(f"[Orchestrator] ⏱️  Prompt updated in {(t1-t0).total_seconds():.2f}s")
                             
                             session_logger.log_prompt_update(new_prompt)
-                            print(f"[Orchestrator] Updated composition at {timestamp}s")
+                            print(f"[Orchestrator] Updated composition at {playback_offset}s")
                 else:
                     # First frame
-                    print(f"[Orchestrator] Analyzing initial frame at {timestamp}s")
+                    print(f"[Orchestrator] Analyzing initial frame at {playback_offset}s")
                     t0 = datetime.now()
                     analysis = await self.gemini_analyzer.analyze_frame(current_frame, composition_context)
                     t1 = datetime.now()
@@ -314,7 +342,7 @@ class MusicGenerationOrchestrator:
                     
                     # Log to session file
                     session_logger = session["session_logger"]
-                    session_logger.log_frame_analysis(timestamp, "Initial Analysis", analysis["composition_notes"])
+                    session_logger.log_frame_analysis(playback_offset, "Initial Analysis", analysis["composition_notes"])
                     
                     t0 = datetime.now()
                     composition_context.update_from_analysis(analysis["composition_notes"])
@@ -330,15 +358,19 @@ class MusicGenerationOrchestrator:
                 previous_frame = current_frame
                 
                 frame_total = (datetime.now() - frame_start).total_seconds()
-                print(f"[Orchestrator] ⏱️  Total time for frame {idx+1}: {frame_total:.2f}s")
+                print(f"[Orchestrator] ⏱️  Total time for frame {frame_count + 1}: {frame_total:.2f}s")
                 
-                # Wait a bit before processing next frame
-                await asyncio.sleep(2)
+                # Move to next playback position
+                playback_offset += frame_interval
+                session["playback_offset"] = playback_offset
+                frame_count += 1
+                
+                # No fixed sleep - we'll wait at the start of next iteration based on scheduled time
                 
             except Exception as e:
-                print(f"[Orchestrator] Error processing frame at {timestamp}s: {e}")
+                print(f"[Orchestrator] Error processing frame at {playback_offset}s: {e}")
         
-        print(f"[Orchestrator] ✅ Finished processing all {len(timestamps)} frames for {session_id}")
+        print(f"[Orchestrator] ✅ Finished processing {frame_count} frames for {session_id} (reached {playback_offset}s / {duration}s)")
     
     async def handle_user_prompt(self, session_id: str, user_prompt: str) -> dict:
         """Handle user prompt."""
