@@ -146,17 +146,29 @@ export const mockStreams: Stream[] = [
   //   isLive: true,
   //   description: "Live jazz performance in an intimate club setting",
   //   tags: ["jazz", "live", "music", "performance"],
-  // },
+  // },https://www.youtube.com/live/YvIXb70fshg
   {
-    id: "lofi-1",
-    title: "lofi hip hop radio — beats to relax/study to",
-    author: "Lofi Girl",
-    thumbnail: "https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg",
-    url: "https://www.youtube.com/watch?v=jfKfPfyJRdk",
-    category: "Music",
-    viewers: 38000,
+    id: "demo-1",
+    title: "Gemini Halloween Demo",
+    author: "Adarsh Goura",
+    thumbnail: "https://i.ytimg.com/vi/YvIXb70fshg/hqdefault.jpg",
+    url: "https://www.youtube.com/watch?v=YvIXb70fshg",
+    category: "Tech",
+    viewers: 1,
     isLive: true,
-    description: "24/7 chill beats for studying and relaxing.",
+    description: "Gemini Halloween Demo",
+    tags: ["live", "radio"]
+  },
+  {
+    id: "ghibli-1",
+    title: "Studio Ghibli Collection",
+    author: "Ghibli Museum",
+    thumbnail: "https://i.ytimg.com/vi/0kudfZJp8w8/hqdefault.jpg",
+    url: "https://www.youtube.com/watch?v=0kudfZJp8w8",
+    category: "Music",
+    viewers: 34,
+    isLive: true,
+    description: "Studio Ghibli Piano Collection no ads between.",
     tags: ["lofi", "live", "radio", "study"]
   },
   {
@@ -183,6 +195,18 @@ export const mockStreams: Stream[] = [
     duration: "1:09:49",
     description: "A night walking tour through Shibuya in 4K HDR.",
     tags: ["tokyo", "shibuya", "walk", "4k"]
+  },
+  {
+    id: "lofi-1",
+    title: "lofi hip hop radio — beats to relax/study to",
+    author: "Lofi Girl",
+    thumbnail: "https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg",
+    url: "https://www.youtube.com/watch?v=jfKfPfyJRdk",
+    category: "Music",
+    viewers: 38000,
+    isLive: true,
+    description: "24/7 chill beats for studying and relaxing.",
+    tags: ["lofi", "live", "radio", "study"]
   },
   {
     id: "cyberpunk-1",

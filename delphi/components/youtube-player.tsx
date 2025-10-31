@@ -56,10 +56,10 @@ export function YouTubePlayer({
         videoId: videoId,
         playerVars: {
           autoplay: 0,
-          controls: 0, // Disable YouTube controls - use custom buttons
-          disablekb: 1, // Disable keyboard controls
+          controls: 1, // Enable YouTube controls including scrub bar
+          disablekb: 0, // Enable keyboard controls
           enablejsapi: 1,
-          fs: 0, // Disable fullscreen
+          fs: 1, // Enable fullscreen
           iv_load_policy: 3,
           modestbranding: 1,
           playsinline: 1,

@@ -3,37 +3,44 @@
 import { useState } from "react";
 import { StreamCard } from "@/components/stream-card";
 import { mockStreams } from "@/lib/mock-data";
-import { TrendingUp, Flame } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 export default function TrendingPage() {
-  // Sort by viewers (trending = most viewers)
   const trendingStreams = [...mockStreams]
     .sort((a, b) => b.viewers - a.viewers)
     .slice(0, 8);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-950 via-purple-900 to-indigo-950">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen">
+      {/* Golden Waves Background */}
+      <div className="golden-waves-container">
+        <div className="golden-wave golden-wave-1"></div>
+        <div className="golden-wave golden-wave-2"></div>
+        <div className="golden-wave golden-wave-3"></div>
+        <div className="golden-wave-thin golden-wave-thin-1"></div>
+        <div className="golden-wave-thin golden-wave-thin-2"></div>
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-7xl px-8 pt-24 pb-16 sm:px-12 lg:px-16">
         {/* Header */}
-        <div className="mb-12 text-center">
-          <div className="mb-4 flex items-center justify-center gap-3">
-            <Flame className="h-10 w-10 text-orange-500" />
-            <TrendingUp className="h-8 w-8 text-purple-400" />
-            <h1 className="text-4xl font-bold text-white md:text-5xl">
+        <div className="mb-16 text-center">
+          <div className="mb-6 flex items-center justify-center gap-4">
+            <TrendingUp className="h-8 w-8 text-[#CBB994]" />
+            <h1 className="text-5xl font-light tracking-tight text-[#2c2414] md:text-6xl">
               Trending Streams
             </h1>
           </div>
-          <p className="mx-auto max-w-2xl text-lg text-purple-200 md:text-xl">
+          <p className="mx-auto max-w-2xl text-lg font-light text-[#6b5842] md:text-xl">
             Most popular streams generating music right now
           </p>
         </div>
 
         {/* Trending Streams Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {trendingStreams.map((stream, index) => (
             <div key={stream.id} className="relative">
               {index < 3 && (
-                <div className="absolute -top-2 -left-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 text-white font-bold shadow-lg">
+                <div className="absolute -top-3 -left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#CBB994] text-white font-light text-sm shadow-lg">
                   {index + 1}
                 </div>
               )}
@@ -43,12 +50,11 @@ export default function TrendingPage() {
         </div>
 
         {trendingStreams.length === 0 && (
-          <div className="rounded-lg bg-white/5 p-12 text-center backdrop-blur-sm">
-            <p className="text-lg text-gray-400">No trending streams at the moment.</p>
+          <div className="luxury-card rounded-lg p-16 text-center">
+            <p className="text-lg font-light text-[#2c2414]">No trending streams at the moment.</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-

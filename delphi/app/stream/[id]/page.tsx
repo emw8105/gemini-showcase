@@ -439,10 +439,10 @@ export default function StreamPage() {
 
   if (!stream) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-950 via-purple-900 to-indigo-950">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="text-xl text-white">Stream not found</p>
-          <p className="mt-2 text-purple-200">Redirecting to home...</p>
+          <p className="text-xl font-light text-[#2c2414]">Stream not found</p>
+          <p className="mt-2 text-sm font-light text-[#6b5842]">Redirecting to home...</p>
         </div>
       </div>
     );
@@ -590,16 +590,21 @@ export default function StreamPage() {
 
   const handleDownload = async () => {
     const currentSessionId = sessionIdRef.current || sessionId;
-    if (!currentSessionId) return;
+    if (!currentSessionId) {
+      console.error('❌ No active session to download');
+      return;
+    }
 
     try {
+      console.log('📥 Preparing download...');
+
       const response = await fetch(`${API_BASE}/api/music/download`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: sessionIdRef.current || sessionId
+          session_id: currentSessionId
         })
       });
 
@@ -607,10 +612,12 @@ export default function StreamPage() {
         throw new Error(`Download failed: ${response.statusText}`);
       }
 
+      // Get the WAV file as a blob
       const blob = await response.blob();
+      
+      // Extract filename from Content-Disposition header or use default
       const contentDisposition = response.headers.get('Content-Disposition');
       let filename = 'gemini_music.wav';
-      
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
         if (filenameMatch) {
@@ -618,6 +625,7 @@ export default function StreamPage() {
         }
       }
 
+      // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -626,10 +634,16 @@ export default function StreamPage() {
       document.body.appendChild(a);
       a.click();
       
+      // Cleanup
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+
+      const sizeKB = (blob.size / 1024).toFixed(2);
+      console.log(`✅ Downloaded ${filename} (${sizeKB} KB)`);
+
     } catch (error) {
-      console.error('Error downloading audio:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Error downloading audio: ${errorMessage}`);
     }
   };
 
@@ -784,33 +798,41 @@ export default function StreamPage() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-purple-950 via-purple-900 to-indigo-950">
-      <div className="mx-auto h-full max-w-[95vw] px-2 py-2 sm:px-4 lg:px-6">
+    <div className="relative h-screen overflow-hidden">
+      {/* Golden Waves Background */}
+      <div className="golden-waves-container">
+        <div className="golden-wave golden-wave-1"></div>
+        <div className="golden-wave golden-wave-2"></div>
+        <div className="golden-wave golden-wave-3"></div>
+        <div className="golden-wave-thin golden-wave-thin-1"></div>
+        <div className="golden-wave-thin golden-wave-thin-2"></div>
+      </div>
+      <div className="relative mx-auto h-full max-w-[95vw] px-6 pt-24 pb-6 sm:px-8 lg:px-12 z-10">
         {/* Top Bar - Back, Title */}
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <Link href="/discover">
-            <Button variant="ghost" size="sm" className="h-7 text-white hover:bg-white/10 px-2">
-              <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-              <span className="text-xs">Back</span>
+            <Button variant="ghost" size="sm" className="h-8 text-[#6b5842] hover:text-[#CBB994] hover:bg-transparent px-3 text-sm font-light">
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              <span>Back</span>
             </Button>
           </Link>
           
           {sessionId && (
-            <Badge variant="outline" className="text-[10px] text-purple-300 border-purple-700/50 bg-purple-900/30 px-1.5 py-0.5">
+            <Badge variant="outline" className="text-xs font-light text-[#6b5842] border-[#e7e5e4] bg-white/70 px-3 py-1">
               ID: {sessionId}
             </Badge>
           )}
         </div>
 
-        {/* Stream Info - Compact */}
-        <div className="mb-2">
-          <div className="mb-1 flex items-center gap-2">
-            <h1 className="text-lg font-bold text-white truncate">{stream.title}</h1>
+        {/* Stream Info */}
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-3">
+            <h1 className="text-2xl font-light tracking-tight text-[#2c2414] truncate">{stream.title}</h1>
             {stream.isLive && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0.5">
-                <span className="relative mr-1 flex h-1 w-1">
+              <Badge className="bg-red-600 text-white text-xs font-light px-3 py-1 border-0">
+                <span className="relative mr-1.5 flex h-1.5 w-1.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex h-1 w-1 rounded-full bg-red-500" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
                 </span>
                 LIVE
               </Badge>
@@ -820,7 +842,7 @@ export default function StreamPage() {
               isConnected 
                 ? "bg-green-500/20 text-green-400 border border-green-500/50" 
                 : isConnecting
-                ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/50"
+                ? "bg-[#CBB994]/20 text-[#CBB994] border border-[#CBB994]/50"
                 : "bg-red-500/20 text-red-400 border border-red-500/50"
             }`}>
               {isConnecting ? (
@@ -832,13 +854,14 @@ export default function StreamPage() {
               )}
               {isConnecting ? "Connecting..." : isConnected ? "Connected" : "Disconnected"}
             </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-purple-300">
-            <span>{stream.author}</span>
-            <span>•</span>
-            <div className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              <span>{stream.viewers.toLocaleString()}</span>
+            {/* Author and Viewers - Right side */}
+            <div className="ml-auto flex items-center gap-3 text-sm font-light text-[#6b5842]">
+              <span>{stream.author}</span>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                <span>{stream.viewers.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -848,7 +871,7 @@ export default function StreamPage() {
           <div className="lg:col-span-4 flex flex-col gap-2 min-h-0">
 
             {/* Video Display - Main Focus */}
-            <Card className="border-purple-700/50 bg-black/50 backdrop-blur-sm overflow-hidden flex-[0.88] min-h-0">
+            <Card className="luxury-card overflow-hidden flex-[0.88] min-h-0 border-[#e7e5e4]">
               <CardContent className="p-0 h-full">
                 <div className="relative w-full h-full overflow-hidden bg-black">
                   {videoId ? (
@@ -863,9 +886,9 @@ export default function StreamPage() {
                       {isConnecting && (
                         <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-10">
                           <div className="text-center">
-                            <Loader2 className="mx-auto h-12 w-12 text-purple-400 animate-spin mb-4" />
-                            <p className="text-white text-lg font-semibold">Connecting to server...</p>
-                            <p className="text-purple-300 text-sm mt-2">Please wait</p>
+                            <Loader2 className="mx-auto h-12 w-12 text-[#CBB994] animate-spin mb-4" />
+                            <p className="text-white text-lg font-light">Connecting to server...</p>
+                            <p className="text-white/80 text-sm mt-2 font-light">Please wait</p>
                           </div>
                         </div>
                       )}
@@ -873,7 +896,7 @@ export default function StreamPage() {
                   ) : (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
-                        <Music2 className="mx-auto h-12 w-12 text-purple-500/50 mb-2" />
+                        <Music2 className="mx-auto h-12 w-12 text-[#CBB994]/50 mb-2" />
                         <p className="text-gray-400 text-sm mb-1">Invalid YouTube URL</p>
                         <p className="text-xs text-gray-600">{youtubeUrl}</p>
                       </div>
@@ -884,25 +907,25 @@ export default function StreamPage() {
             </Card>
 
             {/* Prompt Box */}
-            <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-              <CardContent className="p-3">
-                <div className="flex gap-2">
+            <Card className="luxury-card">
+              <CardContent className="p-4">
+                <div className="flex gap-3">
                   <Input
                     type="text"
                     value={userPrompt}
                     onChange={(e) => setUserPrompt(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendPrompt()}
                     placeholder="Music prompt (optional)..."
-                    className="h-8 text-sm border-gray-300 dark:border-gray-700"
+                      className="h-10 text-sm font-light bg-white/70 border-[#e7e5e4] text-[#2c2414] placeholder:text-[#a8a29e] focus:bg-white focus:border-[#CBB994]/30"
                   />
                   <Button 
-                    variant="secondary" 
+                    variant="ghost" 
                     size="sm" 
-                    className="border-gray-300 dark:border-gray-700"
+                      className="text-[#6b5842] hover:text-[#CBB994] hover:bg-transparent"
                     onClick={handleSendPrompt}
                     disabled={!isConnected || !sessionId}
                   >
-                    <Send className="h-3.5 w-3.5" />
+                    <Send className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>
@@ -912,36 +935,36 @@ export default function StreamPage() {
           {/* Sidebar - Stats and Additional Controls */}
           <div className="lg:col-span-1 flex flex-col gap-2 min-h-0 overflow-y-auto">
             {/* Control Buttons */}
-            <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-              <CardContent className="p-3">
-                <div className="grid grid-cols-2 gap-1.5">
+            <Card className="luxury-card">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     onClick={handlePlay}
                     disabled={!isConnected || !sessionId || isGenerating}
                     size="sm"
-                    className="h-8 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:opacity-50 text-xs px-2"
+                    className="h-9 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-xs px-3 text-white font-light border-0"
                     title="Play"
                   >
-                    <Play className="mr-1 h-3.5 w-3.5" />
+                    <Play className="mr-1.5 h-4 w-4" />
                     Play
                   </Button>
                   <Button
                     onClick={handlePause}
                     disabled={!isConnected || !sessionId}
                     size="sm"
-                    className="h-8 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:opacity-50 text-xs px-2"
+                    className="h-9 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-xs px-3 text-white font-light border-0"
                     title="Pause"
                   >
-                    <Pause className="mr-1 h-3.5 w-3.5" />
+                    <Pause className="mr-1.5 h-4 w-4" />
                     Pause
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                <div className="grid grid-cols-2 gap-2 mt-2">
                   <Button
                     onClick={connectWebSocket}
                     disabled={isConnected}
                     size="sm"
-                    className="h-8 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 text-xs px-2"
+                      className="h-8 bg-[#CBB994] hover:bg-[#B4A582] disabled:opacity-50 text-xs px-3 text-white font-light shadow-sm border-0"
                     title="Connect"
                   >
                     <Wifi className="mr-1 h-3.5 w-3.5" />
@@ -949,65 +972,65 @@ export default function StreamPage() {
                   </Button>
                   <Button
                     onClick={handleDownload}
-                    variant="secondary"
+                    variant="ghost"
                     size="sm"
-                    className="h-8 border-gray-300 dark:border-gray-700 text-xs px-2"
+                    className="h-9 text-[#6b5842] hover:text-[#CBB994] hover:bg-transparent text-xs px-3 font-light border border-[#e7e5e4]"
                     title="Download"
-                    disabled={!sessionId || audioChunks === 0}
+                    disabled={!sessionId}
                   >
-                    <Download className="mr-1 h-3.5 w-3.5" />
+                    <Download className="mr-1.5 h-4 w-4" />
                     Download
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Stats Cards - Compact */}
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-              <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-                <CardHeader className="pb-1 px-3 pt-3">
-                  <CardDescription className="text-[10px] font-medium">Audio Chunks</CardDescription>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
+              <Card className="luxury-card">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardDescription className="text-xs font-light text-[#6b5842]">Audio Chunks</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-0 px-3 pb-3">
-                  <div className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                <CardContent className="pt-0 px-4 pb-4">
+                  <div className="text-3xl font-light text-[#2c2414]">
                     {audioChunks}
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-                <CardHeader className="pb-1 px-3 pt-3">
-                  <CardDescription className="text-[10px] font-medium">Data Received</CardDescription>
+              <Card className="luxury-card">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardDescription className="text-xs font-light text-[#6b5842]">Data Received</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-0 px-3 pb-3">
-                  <div className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                <CardContent className="pt-0 px-4 pb-4">
+                  <div className="text-3xl font-light text-[#2c2414]">
                     {formatBytes(dataReceived)}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Stream Details - Compact */}
-            <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-              <CardHeader className="pb-1 px-3 pt-3">
-                <CardDescription className="text-[10px] font-medium uppercase tracking-wide">Details</CardDescription>
+            {/* Stream Details */}
+            <Card className="luxury-card">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardDescription className="text-xs font-light text-[#6b5842] uppercase tracking-wide">Details</CardDescription>
               </CardHeader>
-              <CardContent className="pt-0 px-3 pb-3 space-y-2">
-                <p className="text-[10px] text-gray-600 dark:text-gray-400 line-clamp-2">
+              <CardContent className="pt-0 px-4 pb-4 space-y-3">
+                <p className="text-sm font-light text-[#6b5842] leading-relaxed line-clamp-3">
                   {stream.description}
                 </p>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-2">
                   {stream.tags.slice(0, 3).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-1 py-0">
+                    <Badge key={tag} variant="secondary" className="text-xs font-light bg-[#fafaf9] text-[#6b5842] border border-[#e7e5e4] px-2.5 py-1">
                       {tag}
                     </Badge>
                   ))}
                 </div>
-                <div className="pt-1 border-t border-gray-200 dark:border-gray-700">
+                <div className="pt-3 border-t border-[#e7e5e4]">
                   <Input
                     type="url"
                     value={youtubeUrl}
                     readOnly
-                    className="h-6 text-[10px] border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
+                    className="h-8 text-xs font-light border-[#e7e5e4] bg-[#fafaf9] text-[#6b5842]"
                   />
                 </div>
               </CardContent>
