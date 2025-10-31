@@ -61,6 +61,19 @@ class MusicGenerationOrchestrator:
             if not self.is_initialized:
                 raise Exception("Orchestrator not initialized")
             
+            # If session already exists (user restarting), clean it up first
+            if session_id in self.active_sessions:
+                print(f"[Orchestrator] 🔄 Session {session_id} already exists, cleaning up old data...")
+                old_session = self.active_sessions[session_id]
+                
+                # Stop old session if still active
+                if old_session.get("is_active"):
+                    await self.stop_music_generation(session_id)
+                
+                # Clear old session completely
+                self.cleanup_session(session_id)
+                print(f"[Orchestrator] ✅ Old session data cleared")
+            
             # Get video info
             t0 = datetime.now()
             video_info = await self.frame_extractor.get_video_info(video_url)
@@ -84,6 +97,7 @@ class MusicGenerationOrchestrator:
             # Set up audio data handler to relay to client
             first_audio_received = [False]  # Track first audio chunk
             first_audio_time = [None]
+            audio_chunks = []  # Store chunks for potential download
             
             async def relay_audio(audio_data):
                 try:
@@ -92,6 +106,11 @@ class MusicGenerationOrchestrator:
                         first_audio_time[0] = datetime.now()
                         elapsed = (first_audio_time[0] - start_time).total_seconds()
                         print(f"[Orchestrator] 🎵 First audio chunk received in {elapsed:.2f}s from start")
+                    
+                    # Store chunk for download capability
+                    audio_chunks.append(audio_data)
+                    
+                    # Relay to client
                     await client_websocket.send_bytes(audio_data)
                 except Exception as e:
                     print(f"[Orchestrator] Error relaying audio: {e}")
@@ -128,7 +147,8 @@ class MusicGenerationOrchestrator:
                 "is_live": video_info["is_live"],
                 "frame_index": 0,
                 "is_active": True,
-                "started_at": datetime.now().timestamp()
+                "started_at": datetime.now().timestamp(),
+                "audio_chunks": audio_chunks  # Store reference to audio buffer
             }
             
             self.active_sessions[session_id] = session
@@ -464,6 +484,81 @@ class MusicGenerationOrchestrator:
             "new_offset": new_offset
         }
     
+    def export_audio_as_wav(self, session_id: str) -> bytes:
+        """
+        Export all collected audio chunks as a WAV file.
+        
+        Args:
+            session_id: The session identifier
+        
+        Returns:
+            bytes: WAV file data ready for download
+        
+        Raises:
+            Exception: If session not found or no audio chunks available
+        """
+        session = self.active_sessions.get(session_id)
+        
+        if not session:
+            raise Exception(f"Session {session_id} not found")
+        
+        audio_chunks = session.get("audio_chunks", [])
+        
+        print(f"[Orchestrator] 💾 Session found: {session_id}")
+        print(f"[Orchestrator] 💾 Audio chunks available: {len(audio_chunks)}")
+        
+        if not audio_chunks:
+            raise Exception(f"No audio data available for session {session_id}. Music may not have started yet.")
+        
+        print(f"[Orchestrator] 💾 Exporting {len(audio_chunks)} audio chunks as WAV for session {session_id}")
+        
+        # Lyria audio format: 48kHz, stereo (2 channels), 16-bit PCM
+        # This MUST match what the frontend expects (see index.html handleAudioData)
+        sample_rate = 48000
+        num_channels = 2
+        bits_per_sample = 16
+        
+        # Concatenate all PCM chunks
+        try:
+            pcm_data = b''.join(audio_chunks)
+        except Exception as e:
+            print(f"[Orchestrator] ❌ Error concatenating audio chunks: {e}")
+            raise Exception(f"Failed to concatenate audio chunks: {e}")
+        
+        # Calculate sizes
+        data_size = len(pcm_data)
+        file_size = data_size + 36  # 44 byte header - 8 bytes
+        
+        # Build WAV header
+        import struct
+        
+        wav_header = b''
+        wav_header += b'RIFF'  # ChunkID
+        wav_header += struct.pack('<I', file_size)  # ChunkSize
+        wav_header += b'WAVE'  # Format
+        
+        # fmt subchunk
+        wav_header += b'fmt '  # Subchunk1ID
+        wav_header += struct.pack('<I', 16)  # Subchunk1Size (16 for PCM)
+        wav_header += struct.pack('<H', 1)  # AudioFormat (1 for PCM)
+        wav_header += struct.pack('<H', num_channels)  # NumChannels
+        wav_header += struct.pack('<I', sample_rate)  # SampleRate
+        wav_header += struct.pack('<I', sample_rate * num_channels * bits_per_sample // 8)  # ByteRate
+        wav_header += struct.pack('<H', num_channels * bits_per_sample // 8)  # BlockAlign
+        wav_header += struct.pack('<H', bits_per_sample)  # BitsPerSample
+        
+        # data subchunk
+        wav_header += b'data'  # Subchunk2ID
+        wav_header += struct.pack('<I', data_size)  # Subchunk2Size
+        
+        # Combine header + PCM data
+        wav_file = wav_header + pcm_data
+        
+        duration_seconds = data_size / (sample_rate * num_channels * bits_per_sample // 8)
+        print(f"[Orchestrator] ✅ WAV export complete: {len(wav_file)} bytes, {duration_seconds:.1f}s duration")
+        
+        return wav_file
+    
     async def stop_music_generation(self, session_id: str):
         """Stop music generation for a session."""
         session = self.active_sessions.get(session_id)
@@ -483,11 +578,21 @@ class MusicGenerationOrchestrator:
         # Release Lyria connection back to pool
         await self.lyria_pool.release_connection(session_id)
         
-        # Clean up
-        del self.active_sessions[session_id]
+        # DON'T delete the session yet - keep it around so users can download audio
+        # Just mark it as stopped
+        session["stopped_at"] = datetime.now().timestamp()
+        
+        # Note: Session will be cleaned up when client disconnects or explicitly requests cleanup
+        
         self.frame_extractor.reset()
         
-        print(f"[Orchestrator] Session {session_id} stopped")
+        print(f"[Orchestrator] Session {session_id} stopped (audio still available for download)")
+    
+    def cleanup_session(self, session_id: str):
+        """Completely remove a session and its data."""
+        if session_id in self.active_sessions:
+            print(f"[Orchestrator] Cleaning up session {session_id}")
+            del self.active_sessions[session_id]
     
     def get_session_status(self, session_id: str) -> dict:
         """Get session status."""

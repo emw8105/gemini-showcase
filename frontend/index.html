@@ -270,6 +270,9 @@
             <button id="stopBtn" class="btn-danger" onclick="stopMusic()" disabled>
                 Stop
             </button>
+            <button id="downloadBtn" class="btn-secondary" onclick="downloadAudio()" disabled>
+                💾 Download Audio
+            </button>
         </div>
 
         <div class="input-group">
@@ -345,6 +348,7 @@
         const stopBtn = document.getElementById('stopBtn');
         const promptBtn = document.getElementById('promptBtn');
         const seekBtn = document.getElementById('seekBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
         const chunkCountEl = document.getElementById('chunkCount');
         const dataReceivedEl = document.getElementById('dataReceived');
 
@@ -601,6 +605,7 @@
                     stopBtn.disabled = false;
                     promptBtn.disabled = false;
                     seekBtn.disabled = false;
+                    downloadBtn.disabled = false;  // Enable download as soon as music starts
                     
                     // Reset buffering state for new session
                     isBuffering = true;
@@ -642,6 +647,7 @@
                     stopBtn.disabled = true;
                     promptBtn.disabled = true;
                     seekBtn.disabled = true;
+                    downloadBtn.disabled = false;  // Keep download available (audio chunks preserved)
                     
                     // Reset audio playback state
                     nextPlayTime = 0;
@@ -655,6 +661,63 @@
 
             } catch (error) {
                 log(`Error stopping music: ${error.message}`, 'error');
+            }
+        }
+
+        async function downloadAudio() {
+            if (!sessionId) {
+                log('No active session to download', 'error');
+                return;
+            }
+
+            try {
+                log('Preparing download...', 'info');
+
+                const response = await fetch('http://localhost:3001/api/music/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                // Get the WAV file as a blob
+                const blob = await response.blob();
+                
+                // Extract filename from Content-Disposition header or use default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'gemini_music.wav';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                const sizeKB = (blob.size / 1024).toFixed(2);
+                log(`✅ Downloaded ${filename} (${sizeKB} KB)`, 'success');
+
+            } catch (error) {
+                log(`Error downloading audio: ${error.message}`, 'error');
             }
         }
 

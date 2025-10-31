@@ -9,6 +9,7 @@ Handles:
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, Dict
 import uuid
@@ -104,6 +105,10 @@ class SeekRequest(BaseModel):
 
 
 class StopMusicRequest(BaseModel):
+    session_id: str
+
+
+class DownloadRequest(BaseModel):
     session_id: str
 
 
@@ -207,6 +212,41 @@ async def stop_music(request: StopMusicRequest):
         raise HTTPException(status_code=500, detail=f"Failed to stop music generation: {str(e)}")
 
 
+@app.post("/api/music/download")
+async def download_audio(request: DownloadRequest):
+    """
+    Download all generated audio as a WAV file.
+    Returns the complete audio from the session as a downloadable file.
+    """
+    try:
+        print(f"[API] Download request for session: {request.session_id}")
+        
+        # Export audio as WAV
+        wav_data = orchestrator.export_audio_as_wav(request.session_id)
+        
+        # Generate filename with session ID and timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gemini_music_{request.session_id[:8]}_{timestamp}.wav"
+        
+        print(f"[API] Sending WAV file: {filename} ({len(wav_data)} bytes)")
+        
+        # Return WAV file with proper headers
+        return Response(
+            content=wav_data,
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(wav_data))
+            }
+        )
+        
+    except Exception as e:
+        print(f"[API] ❌ Download error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to download audio: {str(e)}")
+
+
 @app.get("/api/session/{session_id}")
 async def get_session_status(session_id: str):
     """Get the status of a session."""
@@ -274,8 +314,9 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"[WebSocket] Client disconnected: {session_id}")
         clients.pop(session_id, None)
         
-        # Stop music generation if active
+        # Stop music generation if active and cleanup session
         await orchestrator.stop_music_generation(session_id)
+        orchestrator.cleanup_session(session_id)
         
     except Exception as e:
         print(f"[WebSocket] Error for {session_id}: {e}")
