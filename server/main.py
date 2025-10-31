@@ -72,12 +72,24 @@ app = FastAPI(
 
 # Configure CORS
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# Allow common development ports for Next.js and Vite
+ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:3000",  # Next.js default
+    "http://localhost:3001",  # Alternative Next.js port
+    "http://localhost:5173",  # Vite default
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 

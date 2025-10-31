@@ -1,5 +1,5 @@
 """
-GeminiAnalyzer - Scene analysis using Gemini 2.0 Flash
+GeminiAnalyzer - Scene analysis using Gemini 2.5 Flash
 
 Analyzes video frames to generate composition notes for Lyria.
 Uses context-aware prompting to prevent redundant suggestions.
@@ -69,11 +69,19 @@ class GeminiAnalyzer:
 
 Video: "{composition_context.video_title}"
 Frame: {frame_description}
+User preferences: {composition_context.user_prompts}
 
 Current music state:
 - Mood: {state['mood']}
 - Tempo: {state['tempo']}
 - Intensity: {state['intensity']}
+
+SPECIAL DETECTION RULES (Halloween Demo):
+There may be frames shown with images of space, but if aliens or extraterrestrials are detected:
+- Switch to eerie sci-fi or spooky alien-themed music
+- Use ominous synths, theremin-like sounds, electronic atmospheres
+- Create suspenseful, otherworldly, mysterious vibes
+- Examples: "Eerie sci-fi ambience with ominous synth drones and glitchy effects. Alien and mysterious atmosphere."
 
 LYRIA CAPABILITIES:
 Lyria responds best to rich, descriptive prompts that specify:
@@ -88,6 +96,8 @@ Generate a concise but descriptive music prompt (2-3 sentences) that:
 - Specifies concrete instruments and genre
 - Uses vivid musical descriptors
 - Builds on the current state smoothly (no abrupt changes)
+- Honors user preferences, directly add any suggestions from the user preferences to the prompt.
+- **PRIORITY**: If aliens detected, switch to spooky sci-fi music!
 
 EXAMPLES:
 - "Upbeat synthpop with bright tones and spacey synths. Danceable rhythm with a tight groove."
@@ -181,12 +191,21 @@ Music prompt for this scene:"""
             prompt = f"""You are a music director analyzing scene changes for Lyria RealTime music generation.
 
 Video: "{composition_context.video_title}"
+User preferences: {composition_context.user_prompts}
 
 Current music:
 - Genre/Style: {state.get('genre', 'adaptive')}
 - Mood: {state['mood']}
 - Tempo: {state['tempo']}
 - Intensity: {state['intensity']}
+
+🎃 SPECIAL DETECTION RULES (Halloween Demo):
+**CRITICAL**: If Frame 2 shows aliens or extraterrestrials that weren't in Frame 1:
+- Music MUST change immediately!
+- Switch to eerie sci-fi or spooky alien-themed music
+- Use ominous synths, theremin-like sounds, glitchy electronic atmospheres
+- Create suspenseful, otherworldly, mysterious vibes
+- Example: "Eerie sci-fi ambience with ominous synth drones and theremin-like leads. Alien invasion atmosphere with glitchy effects and unsettling bass."
 
 LYRIA MUSIC SYSTEM:
 Lyria creates real-time adaptive music using rich prompts with:
@@ -198,13 +217,15 @@ Lyria creates real-time adaptive music using rich prompts with:
 YOUR TASK:
 Compare Frame 1 (previous) vs Frame 2 (current):
 
-1. What changed in the scene? (action, mood, lighting, energy)
-2. Should the music change? (yes/no)
+1. What changed in the scene? (action, mood, lighting, energy, **alien presence**)
+2. Should the music change? (yes/no) NOTE: If the user has requested a specific instrument or genre, then the music should change.
 3. If YES: Provide a Lyria-optimized music prompt (2-3 sentences) that:
+   - Honors user preferences, directly add any suggestions from the user preferences to the prompt.
    - Specifies concrete instruments and genre
    - Uses vivid musical descriptors
    - Smoothly transitions from current state
    - Matches the new scene's mood and energy
+   - **PRIORITY**: If alien detected, switch to spooky sci-fi immediately!
 
 If the change is minor or music is already appropriate, say "no change needed".
 
@@ -253,6 +274,8 @@ Analysis:"""
 
 Video: "{composition_context.video_title}"
 Current: {state['mood']} mood, {state['tempo']} tempo
+
+🎃 SPECIAL: If you see aliens or extraterrestrials --> switch to eerie sci-fi music immediately!
 
 Generate a concise Lyria music prompt (1-2 sentences) for this scene.
 Include: instruments, genre/style, and mood descriptors.
