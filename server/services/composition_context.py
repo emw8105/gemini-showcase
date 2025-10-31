@@ -162,16 +162,27 @@ class CompositionContext:
     def get_initial_prompt(self, metadata_prompt: str = None) -> str:
         """
         Get initial prompt for starting Lyria.
+        Includes user prompts if they exist.
         
         Args:
             metadata_prompt: Optional prompt generated from video metadata analysis.
                            If provided, uses this instead of generic fallback.
         """
-        if metadata_prompt:
-            return metadata_prompt
+        parts = []
         
-        # Fallback to generic prompt
-        return 'Generate background music for a video. Start with a neutral, adaptive composition.'
+        # Include user prompts FIRST (highest priority) if they exist
+        if self.user_prompts:
+            user_prefs = ". ".join([p.text for p in self.user_prompts])
+            parts.append(f"User requests: {user_prefs}")
+        
+        # Add metadata prompt or fallback
+        if metadata_prompt:
+            parts.append(metadata_prompt)
+        else:
+            # Fallback to generic prompt
+            parts.append('Generate background music for a video. Start with a neutral, adaptive composition.')
+        
+        return ". ".join(parts) + "."
     
     def reset(self, video_title: str = "") -> None:
         """Reset context for a new video."""

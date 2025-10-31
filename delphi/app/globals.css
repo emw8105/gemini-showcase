@@ -123,3 +123,13 @@
     display: none;
   }
 }
+
+/* Hide YouTube play button overlay */
+.ytp-large-play-button,
+.ytp-cued-thumbnail-overlay-image,
+.ytp-pause-overlay,
+iframe[src*="youtube.com"] + .ytp-large-play-button {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

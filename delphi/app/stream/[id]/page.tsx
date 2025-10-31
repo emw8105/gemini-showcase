@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Music2, Download, Play, Square, Target, Send, Wifi, ArrowLeft, Users, Loader2 } from "lucide-react";
+import { Music2, Download, Play, Square, Send, Wifi, ArrowLeft, Users, Loader2, Pause } from "lucide-react";
 import { mockStreams } from "@/lib/mock-data";
 import { extractYouTubeVideoId } from "@/lib/youtube-utils";
 import { YouTubePlayer } from "@/components/youtube-player";
@@ -17,21 +17,30 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3001/ws";
 
 export default function StreamPage() {
+  console.log('🚀 StreamPage component rendering');
+  
   const params = useParams();
   const router = useRouter();
   const streamId = params.id as string;
   
+  console.log('📍 Stream ID:', streamId);
+  
   const stream = mockStreams.find((s) => s.id === streamId);
   
-  // State (only for UI updates)
+  console.log('📺 Stream found:', !!stream, stream?.title || 'N/A');
+  
+  // State (only for UI updates - minimize re-renders while WS connected)
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userPrompt, setUserPrompt] = useState("");
-  const [seekSeconds, setSeekSeconds] = useState("");
   const [audioChunks, setAudioChunks] = useState(0);
   const [dataReceived, setDataReceived] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Refs to track state without re-renders (used when WS is connected)
+  const sessionIdRef = useRef<string | null>(null);
+  const isGeneratingRef = useRef(false);
 
   // Refs for mutable state that shouldn't trigger re-renders
   const wsRef = useRef<WebSocket | null>(null);
@@ -44,8 +53,6 @@ export default function StreamPage() {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
-  const seekDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const isSeekingRef = useRef(false);
   const hasConnectedRef = useRef(false);
   const hasStartedPlayingRef = useRef<number | false>(false);
   const hasAutoStartedRef = useRef(false);
@@ -53,6 +60,8 @@ export default function StreamPage() {
   const connectionStartTimeRef = useRef(0);
   const hasAttemptedConnectionRef = useRef(false);
   const effectMountedRef = useRef(false);
+  const hasAutoPlayedRef = useRef(false);
+  const isUnmountingRef = useRef(false); // Prevent new connections when navigating away
 
   // Use stream URL if found
   const youtubeUrl = stream?.url || "https://www.youtube.com/watch?v=z9Ug-3qhrwY";
@@ -68,58 +77,67 @@ export default function StreamPage() {
     setDataReceived(bytes);
   }, []);
 
-  // Handle JSON messages from WebSocket
+  // Handle JSON messages from WebSocket (matches index.html)
   const handleJsonMessage = useCallback((data: any) => {
+    console.log(`📨 Received: ${data.type}`, data);
+
     if (data.type === 'session') {
-      setSessionId(data.session_id);
+      console.log(`✅ Session ID: ${data.session_id}`);
+      sessionIdRef.current = data.session_id;
+      // Only update state if not generating (minimize re-renders when WS connected)
+      if (!isGeneratingRef.current) {
+        setSessionId(data.session_id);
+      }
+      
+      // Start music generation immediately when session ID is received
+      if (!isGeneratingRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('🎵 Starting music generation immediately after session received...');
+        setTimeout(async () => {
+          // Double-check conditions after delay
+          if (!isGeneratingRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && sessionIdRef.current) {
+            try {
+              await handleStart();
+            } catch (error) {
+              console.error('❌ Failed to auto-start music:', error);
+            }
+          }
+        }, 200);
+      }
     } else if (data.type === 'pong') {
       // Heartbeat response - no action needed
+      console.log('💓 Pong received');
     } else if (data.type === 'prompt_received') {
+      console.log(`✅ Prompt applied and saved to context: "${data.prompt}"`);
+      console.log('📝 This prompt will be remembered for all future music generation');
       // Prompt was received - could show notification here
     } else if (data.type === 'seek_confirmed') {
-      // Seek was confirmed - COMPLETELY IGNORE during first 10 seconds to prevent ANY resets
-      const timeSinceStart = hasStartedPlayingRef.current 
-        ? Date.now() - hasStartedPlayingRef.current
-        : Infinity;
-      
-      // Ignore ALL seek confirmations for first 10 seconds
-      if (timeSinceStart < 10000) {
-        console.log(`🚫 BLOCKING seek confirmation during early playback (${timeSinceStart}ms) - offset: ${data.offset}`);
-        return;
-      }
-      
-      // Don't seek if we're already processing a seek (avoid reset loops)
-      if (youtubePlayerRef.current && data.offset !== undefined && !isSeekingRef.current && hasStartedPlayingRef.current && data.offset > 1) {
-        try {
-          const currentTime = youtubePlayerRef.current.getCurrentTime();
-          const diff = Math.abs(currentTime - data.offset);
-          
-          // EXTREMELY strict: Only seek forward and only if HUGE difference
-          // Never seek backwards, never seek to beginning
-          const shouldSeek = diff > 10 && data.offset > currentTime + 5; // Must be at least 5 seconds ahead and 10s difference
-          
-          if (shouldSeek && !(data.offset < 2 && currentTime > 5)) {
-            console.log(`✅ Seek confirmed: syncing YouTube player forward from ${currentTime.toFixed(1)}s to ${data.offset}s`);
-            youtubePlayerRef.current.seekTo(data.offset, true);
-          } else {
-            console.log(`🚫 Skipping seek sync: diff=${diff.toFixed(1)}s, backend=${data.offset.toFixed(1)}s, current=${currentTime.toFixed(1)}s (not significant enough or backwards)`);
-          }
-        } catch (e) {
-          console.error('Error syncing YouTube player on seek confirmation:', e);
-        }
-      }
+      // Scrubbing removed - ignore seek confirmations
+      console.log('⚠️ Seek confirmed received (scrubbing disabled):', data);
     }
   }, []);
 
-  // Handle audio data (Blob)
+  // Handle audio data (Blob) - matches index.html exactly
   const handleAudioData = useCallback(async (blob: Blob) => {
-    const newChunkCount = chunkCountRef.current + 1;
-    const newTotalBytes = totalBytesRef.current + blob.size;
-    updateStats(newChunkCount, newTotalBytes);
+    console.log('🔊 Audio chunk received:', blob.size, 'bytes');
+    
+    // Update counters exactly like index.html
+    chunkCountRef.current = chunkCountRef.current + 1;
+    totalBytesRef.current = totalBytesRef.current + blob.size;
+    
+    console.log('📊 Stats updated:', {
+      chunkCount: chunkCountRef.current,
+      totalBytes: totalBytesRef.current,
+      totalBytesKB: (totalBytesRef.current / 1024).toFixed(1)
+    });
+    
+    updateStats(chunkCountRef.current, totalBytesRef.current);
 
     // Initialize audio context if needed
     if (!audioContextRef.current) {
+      console.log('🎵 Initializing audio context');
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      console.log('✅ Audio context initialized');
+      // Reset buffering state when starting fresh (matches index.html)
       isBufferingRef.current = true;
       bufferedDurationRef.current = 0;
       nextPlayTimeRef.current = 0;
@@ -130,60 +148,95 @@ export default function StreamPage() {
 
     try {
       const arrayBuffer = await blob.arrayBuffer();
+      
+      // Raw PCM data: 16-bit signed integers (matches index.html)
       const pcmData = new Int16Array(arrayBuffer);
       
+      // Lyria sends stereo audio (2 channels)
       const sampleRate = 48000;
       const numChannels = 2;
       const numFrames = pcmData.length / numChannels;
       
-      const audioBuffer = audioContext.createBuffer(numChannels, numFrames, sampleRate);
+      // Create audio buffer
+      const audioBuffer = audioContext.createBuffer(
+        numChannels,
+        numFrames,
+        sampleRate
+      );
       
-      // Deinterleave and convert to float [-1, 1]
+      // Deinterleave and convert to float [-1, 1] (matches index.html)
       for (let channel = 0; channel < numChannels; channel++) {
         const channelData = audioBuffer.getChannelData(channel);
         for (let i = 0; i < numFrames; i++) {
+          // Convert 16-bit int to float [-1, 1]
           channelData[i] = pcmData[i * numChannels + channel] / 32768.0;
         }
       }
       
       const chunkDuration = audioBuffer.duration;
+      console.log(`🎼 Processed audio chunk: ${numFrames} frames (${chunkDuration.toFixed(2)}s)`);
       
-      // Buffer management
+      // Buffer management: Only start playback when we have enough buffered (matches index.html)
       if (isBufferingRef.current) {
         bufferedDurationRef.current += chunkDuration;
+        console.log(`📦 Buffering... ${bufferedDurationRef.current.toFixed(2)}s / ${bufferTargetSeconds}s`);
         
         if (bufferedDurationRef.current >= bufferTargetSeconds || chunkCountRef.current >= 3) {
+          // We have enough buffer, start playback!
           isBufferingRef.current = false;
-          nextPlayTimeRef.current = audioContext.currentTime + 0.1;
+          nextPlayTimeRef.current = audioContext.currentTime + 0.1; // Small delay to ensure smooth start
+          console.log(`✅ Buffer ready! Starting playback with ${bufferedDurationRef.current.toFixed(2)}s buffered`);
         }
       }
       
-      // Play the audio
+      // Play the audio with buffering (matches index.html)
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContext.destination);
       
       if (!isBufferingRef.current) {
+        // Schedule playback to ensure smooth continuous audio
         const currentTime = audioContext.currentTime;
         const startTime = Math.max(currentTime, nextPlayTimeRef.current);
         source.start(startTime);
+        
+        // Update next play time for seamless playback
         nextPlayTimeRef.current = startTime + chunkDuration;
+        console.log(`▶️ Playing chunk at ${startTime.toFixed(2)}s, next at ${nextPlayTimeRef.current.toFixed(2)}s`);
+        
+        // Monitor buffer health
+        const bufferHealth = (nextPlayTimeRef.current - audioContext.currentTime);
+        if (bufferHealth < 0.5) {
+          console.warn(`⚠️ Buffer running low: ${bufferHealth.toFixed(2)}s`);
+        } else {
+          console.log(`💚 Buffer health: ${bufferHealth.toFixed(2)}s ahead`);
+        }
       } else {
+        // Still buffering, queue the source for later playback (matches index.html)
         const startTime = nextPlayTimeRef.current || (audioContext.currentTime + 0.1);
         source.start(startTime);
         nextPlayTimeRef.current = startTime + chunkDuration;
+        console.log(`📥 Queued chunk for buffering at ${startTime.toFixed(2)}s`);
       }
       
     } catch (error) {
-      console.error('Audio processing error:', error);
+      console.error('❌ Audio processing error:', error);
     }
   }, [updateStats]);
 
   // WebSocket connection
   const connectWebSocket = useCallback(() => {
+    console.log('🔌 connectWebSocket() called');
+    
+    // Don't connect if component is unmounting
+    if (isUnmountingRef.current) {
+      console.log('⚠️ Component is unmounting, skipping WebSocket connection');
+      return;
+    }
+    
     // Prevent multiple simultaneous connection attempts
     if (isConnectingRef.current) {
-      console.log('WebSocket connection already in progress, skipping...');
+      console.log('⏳ WebSocket connection already in progress, skipping...');
       return;
     }
     
@@ -224,24 +277,47 @@ export default function StreamPage() {
       ws.onopen = () => {
         console.log('WebSocket connected successfully');
         wsRef.current = ws;
-        setIsConnected(true);
+        // Only update state once - minimize re-renders
+        if (!hasConnectedRef.current) {
+          setIsConnected(true);
+        }
         setIsConnecting(false);
         hasConnectedRef.current = true;
         isConnectingRef.current = false;
-        hasAttemptedConnectionRef.current = false; // Reset so we can reconnect if needed
+        hasAttemptedConnectionRef.current = false;
+        
+        // Setup heartbeat (no state updates)
+        if (!heartbeatIntervalRef.current) {
+          heartbeatIntervalRef.current = setInterval(() => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 30000);
+        }
+        
+        // Music will start automatically when session ID is received
+        console.log('⏳ Waiting for session ID to start music...');
       };
 
       ws.onmessage = async (event) => {
+        console.log('📨 WebSocket message received:', {
+          isBlob: event.data instanceof Blob,
+          type: event.data instanceof Blob ? 'Blob' : typeof event.data,
+          size: event.data instanceof Blob ? event.data.size : event.data.length || 'N/A'
+        });
+        
         if (event.data instanceof Blob) {
           // Audio data
+          console.log('🔊 Processing audio blob...');
           await handleAudioData(event.data);
         } else {
           // JSON message
           try {
             const data = JSON.parse(event.data);
+            console.log('📋 JSON message:', data);
             handleJsonMessage(data);
           } catch (e) {
-            console.error('Failed to parse JSON message:', e, event.data);
+            console.error('❌ Failed to parse JSON message:', e, event.data);
           }
         }
       };
@@ -306,116 +382,60 @@ export default function StreamPage() {
     }
   }, [handleAudioData, handleJsonMessage]);
 
-  // Auto-connect on mount
+  // Reset auto-play flag when stream changes
   useEffect(() => {
-    if (!stream) {
-      setTimeout(() => router.push("/discover"), 2000);
-      return;
-    }
+    hasAutoPlayedRef.current = false;
+    console.log('🔄 Reset auto-play flag for new stream');
+  }, [streamId]);
 
-    // Prevent React Strict Mode from running twice - only connect once per mount cycle
-    if (effectMountedRef.current) {
-      console.log('Effect already ran in this mount cycle, skipping...');
-      return;
-    }
-    effectMountedRef.current = true;
-
-    // Check if already connected or connecting before attempting connection
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected, skipping auto-connect');
-      // Still setup heartbeat if connected
-      heartbeatIntervalRef.current = setInterval(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'ping' }));
-        }
-      }, 30000);
-      return;
-    }
+  // WebSocket connection will happen AFTER video starts - not on mount
+  // (Auto-connect useEffect removed - connection happens after video plays)
+  
+  // Cleanup on unmount only - no re-renders while connected
+  useEffect(() => {
+    // Set unmounting flag to false on mount
+    isUnmountingRef.current = false;
     
-    if (isConnectingRef.current) {
-      console.log('WebSocket connection already in progress, skipping auto-connect');
-      return;
-    }
-
-    console.log('Auto-connect effect running, will connect in 150ms...');
-
-    // Small delay to prevent React Strict Mode double-connection
-    const connectTimer = setTimeout(() => {
-      // Double-check all conditions after delay
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        console.log('WebSocket already connected, skipping timer connection');
-        return;
-      }
-      
-      if (isConnectingRef.current) {
-        console.log('Connection already in progress, skipping timer connection');
-        return;
-      }
-      
-      console.log('Timer fired, attempting to connect...');
-      connectWebSocket();
-    }, 150);
-
-    // Setup heartbeat
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-
-    // Cleanup
     return () => {
-      // Clear the connection timer
-      if (connectTimer) {
-        clearTimeout(connectTimer);
+      console.log('🧹 Component unmounting - cleaning up...');
+      // Set flag to prevent new connections during cleanup
+      isUnmountingRef.current = true;
+      
+      // Close WebSocket on unmount
+      if (wsRef.current) {
+        try {
+          console.log('🔌 Closing WebSocket on unmount');
+          if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+            wsRef.current.close(1000, 'Component unmounting');
+          }
+        } catch (e) {
+          console.error('Error closing WebSocket:', e);
+        }
+        wsRef.current = null;
       }
       
-      // Reset mount flag on cleanup so it can run again on next mount
-      effectMountedRef.current = false;
-      
-      // Prevent cleanup if connection was just established (React Strict Mode protection)
-      const connectionAge = connectionStartTimeRef.current > 0
-        ? Date.now() - connectionStartTimeRef.current
-        : Infinity;
-      const isRecentConnection = connectionAge < 500; // Less than 500ms old
-      
+      // Cleanup heartbeat
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
       
-      if (wsRef.current) {
-        // Only close if connection is established or if it's been a while
-        // This prevents closing immediately after opening (React Strict Mode issue)
-        if (isRecentConnection && wsRef.current.readyState === WebSocket.CONNECTING) {
-          console.log('Skipping cleanup - connection too recent (likely React Strict Mode)');
-          // Don't close, just clear the ref - let the connection complete naturally
-          wsRef.current = null;
-          isConnectingRef.current = false;
-        } else {
-          // Close gracefully with code 1000 (normal closure)
-          try {
-            if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-              wsRef.current.close(1000, 'Component unmounting');
-            }
-          } catch (e) {
-            // Ignore errors during cleanup
-          }
-          wsRef.current = null;
-        }
-      }
-      
+      // Cleanup audio context
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => {
           // Ignore errors during cleanup
         });
         audioContextRef.current = null;
       }
+      
+      // Reset all refs
+      isConnectingRef.current = false;
+      hasConnectedRef.current = false;
+      hasAutoPlayedRef.current = false;
+      sessionIdRef.current = null;
+      isGeneratingRef.current = false;
     };
-    // Note: connectWebSocket is accessed via closure. It's stable via useCallback but we intentionally
-    // don't include it in deps to prevent re-runs when handleAudioData/handleJsonMessage change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream, streamId, router]); // Added streamId to ensure it runs when navigating to different streams
+  }, []); // Only run cleanup on unmount - no dependencies to prevent re-renders
 
   if (!stream) {
     return (
@@ -429,12 +449,17 @@ export default function StreamPage() {
   }
 
   const handleStart = useCallback(async () => {
-    if (!sessionId || !wsRef.current) {
-      console.warn('Cannot start music: missing session ID or WebSocket connection');
+    const currentSessionId = sessionIdRef.current || sessionId;
+    console.log('🎵 handleStart called', { sessionId: currentSessionId, hasWs: !!wsRef.current, wsState: wsRef.current?.readyState });
+    
+    if (!currentSessionId || !wsRef.current) {
+      console.warn('❌ Cannot start music: missing session ID or WebSocket connection');
       return false;
     }
 
     try {
+      const currentSessionId = sessionIdRef.current || sessionId;
+      console.log('🚀 Starting music generation...', { video_url: youtubeUrl, session_id: currentSessionId });
       setIsGenerating(true);
 
       const response = await fetch(`${API_BASE}/api/music/start`, {
@@ -444,9 +469,11 @@ export default function StreamPage() {
         },
         body: JSON.stringify({
           video_url: youtubeUrl,
-          session_id: sessionId
+          session_id: sessionIdRef.current || sessionId
         })
       });
+
+      console.log('📡 Music start response:', { status: response.status, ok: response.ok });
 
       if (!response.ok) {
         let errorText = '';
@@ -465,13 +492,13 @@ export default function StreamPage() {
           errorText = `HTTP ${response.status}: ${response.statusText}`;
         }
         
-        console.error(`Failed to start music: ${response.status} ${response.statusText}`, errorText);
+        console.error(`❌ Failed to start music: ${response.status} ${response.statusText}`, errorText);
         
         // Check if it's a timeout error
         const isTimeout = errorText.includes('timeout') || errorText.includes('timed out');
         
         if (isTimeout) {
-          console.warn('Music generation timed out - this may be due to service availability. The video will continue playing.');
+          console.warn('⚠️ Music generation timed out - this may be due to service availability. The video will continue playing.');
         }
         
         setIsGenerating(false);
@@ -479,61 +506,91 @@ export default function StreamPage() {
       }
 
       const result = await response.json();
+      console.log('✅ Music start result:', result);
 
       if (result.success) {
-        // Reset buffering state
+        console.log('🎉 Music generation started successfully');
+        console.log(`📹 Video: ${result.video_info?.title || 'Unknown'}`);
+        console.log(`⏱️ Duration: ${result.video_info?.duration || 'N/A'}s, Live: ${result.video_info?.is_live || false}`);
+        
+        const startTimestamp = Date.now();
+        isGeneratingRef.current = true;
+        
+        // Reset buffering state (matches index.html - reset for new session)
         isBufferingRef.current = true;
         bufferedDurationRef.current = 0;
         nextPlayTimeRef.current = 0;
         chunkCountRef.current = 0;
         totalBytesRef.current = 0;
         updateStats(0, 0);
+        console.log('🔄 Reset all counters and buffering state');
+        
+        // Only update state once - minimize re-renders when WS connected
+        setIsGenerating(true);
+        
         // Mark that we've started playing immediately when music starts (not delayed)
         // This ensures the blocking timers start right away
-        hasStartedPlayingRef.current = Date.now();
+        hasStartedPlayingRef.current = startTimestamp;
+        console.log('✅ hasStartedPlayingRef set to:', startTimestamp);
+        
         return true;
       } else {
-        console.error('Music start returned success=false:', result);
+        console.error('❌ Music start returned success=false:', result);
         setIsGenerating(false);
         return false;
       }
     } catch (error) {
-      console.error('Error starting music:', error);
+      console.error('❌ Error starting music:', error);
       setIsGenerating(false);
       return false;
     }
-  }, [sessionId, youtubeUrl, updateStats]);
+  }, [youtubeUrl, updateStats]); // Removed sessionId from deps - use ref instead
 
   const handleStop = useCallback(async () => {
-    if (!sessionId) return;
+    const currentSessionId = sessionIdRef.current || sessionId;
+    if (!currentSessionId) {
+      console.warn('⚠️ Cannot stop: no session ID');
+      return;
+    }
 
     try {
+      console.log('🛑 Stopping music generation...');
+      
       const response = await fetch(`${API_BASE}/api/music/stop`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: sessionId
+          session_id: sessionIdRef.current || sessionId
         })
       });
 
       const result = await response.json();
+      console.log('🛑 Stop result:', result);
 
       if (result.success) {
+        console.log('✅ Music stopped');
+        isGeneratingRef.current = false;
         setIsGenerating(false);
+        
+        // Reset audio playback state (matches index.html)
         nextPlayTimeRef.current = 0;
         chunkCountRef.current = 0;
         totalBytesRef.current = 0;
+        isBufferingRef.current = true;
+        bufferedDurationRef.current = 0;
         updateStats(0, 0);
+        console.log('🔄 Reset all audio state');
       }
     } catch (error) {
-      console.error('Error stopping music:', error);
+      console.error('❌ Error stopping music:', error);
     }
-  }, [sessionId, updateStats]);
+  }, [updateStats]); // Removed sessionId from deps - use ref instead
 
   const handleDownload = async () => {
-    if (!sessionId) return;
+    const currentSessionId = sessionIdRef.current || sessionId;
+    if (!currentSessionId) return;
 
     try {
       const response = await fetch(`${API_BASE}/api/music/download`, {
@@ -542,7 +599,7 @@ export default function StreamPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: sessionId
+          session_id: sessionIdRef.current || sessionId
         })
       });
 
@@ -577,154 +634,153 @@ export default function StreamPage() {
   };
 
   const handleSendPrompt = () => {
-    if (!userPrompt.trim() || !sessionId || !wsRef.current) {
+    const currentSessionId = sessionIdRef.current || sessionId;
+    const promptText = userPrompt.trim();
+    
+    if (!promptText) {
+      console.warn('⚠️ Cannot send empty prompt');
+      return;
+    }
+    
+    if (!currentSessionId) {
+      console.warn('⚠️ Cannot send prompt: no session ID');
+      return;
+    }
+    
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('⚠️ Cannot send prompt: WebSocket not connected');
       return;
     }
 
     try {
+      console.log(`📝 Sending prompt: "${promptText}"`);
+      
+      // Send via WebSocket (matches index.html exactly)
       wsRef.current.send(JSON.stringify({
         type: 'prompt',
-        prompt: userPrompt
+        prompt: promptText
       }));
+      
+      console.log('✅ Prompt sent via WebSocket - will be remembered in context');
       setUserPrompt("");
     } catch (error) {
-      console.error('Error sending prompt:', error);
+      console.error('❌ Error sending prompt:', error);
     }
   };
+
+  // Handle play button - controls both YouTube video and music generation
+  const handlePlay = useCallback(async () => {
+    console.log('▶️ Play button clicked');
+    
+    if (!youtubePlayerRef.current) {
+      console.warn('⚠️ YouTube player not ready');
+      return;
+    }
+
+    // Start YouTube video (decoupled from WebSocket)
+    try {
+      youtubePlayerRef.current.playVideo();
+      console.log('✅ YouTube video started');
+      
+      // Connect WebSocket if not already connected (music will auto-start when session ID arrives)
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+        if (!isUnmountingRef.current) {
+          console.log('🔌 Connecting WebSocket after play button...');
+          connectWebSocket();
+        }
+      } else if (wsRef.current.readyState === WebSocket.OPEN && sessionIdRef.current && !isGeneratingRef.current) {
+        // Already connected with session - start music immediately
+        setTimeout(async () => {
+          if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current && !isGeneratingRef.current) {
+            try {
+              await handleStart();
+            } catch (error) {
+              console.error('❌ Failed to start music generation:', error);
+            }
+          }
+        }, 200);
+      }
+    } catch (error) {
+      console.error('❌ Error playing YouTube video:', error);
+    }
+  }, [connectWebSocket, handleStart]);
+
+  // Handle pause button - controls both YouTube video and music generation
+  const handlePause = useCallback(async () => {
+    console.log('⏸️ Pause button clicked');
+    
+    if (!youtubePlayerRef.current) {
+      console.warn('⚠️ YouTube player not ready');
+      return;
+    }
+
+    // Pause YouTube video
+    try {
+      youtubePlayerRef.current.pauseVideo();
+      console.log('✅ YouTube video paused');
+    } catch (error) {
+      console.error('❌ Error pausing YouTube video:', error);
+    }
+
+    // Stop music generation if generating (check ref to avoid re-render)
+    if (isGeneratingRef.current && sessionIdRef.current) {
+      console.log('🛑 Stopping music generation...');
+      handleStop().catch((error) => {
+        console.error('❌ Failed to stop music generation:', error);
+      });
+    }
+  }, [handleStop]);
 
   // Handle YouTube player ready
   const handleYouTubeReady = useCallback((player: any) => {
     youtubePlayerRef.current = player;
     // Video is automatically muted by the YouTubePlayer component
-    console.log('YouTube player ready');
-  }, []);
-  
-  // Handle YouTube player state changes (play, pause, etc.)
-  // Only start music when user presses play AND connection is established
-  const handleYouTubeStateChange = useCallback(async (event: any) => {
-    // YT.PlayerState: -1 (UNSTARTED), 0 (ENDED), 1 (PLAYING), 2 (PAUSED), 3 (BUFFERING), 5 (CUED)
-    const state = event.data;
+    console.log('✅ YouTube player ready');
     
-    if (state === 1) { // PLAYING
-      // User pressed play on YouTube - start music generation
-      // Only start if we have a valid connection and aren't already generating
-      if (!isGenerating && isConnected && sessionId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        setTimeout(async () => {
-          // Double-check conditions after delay
-          if (!isGenerating && isConnected && sessionId && wsRef.current?.readyState === WebSocket.OPEN) {
-            try {
-              await handleStart();
-            } catch (error) {
-              console.error('Failed to start music generation:', error);
-              // Video continues playing even if music generation fails
-            }
-          }
-        }, 200);
-      } else if (!isConnected || !sessionId) {
-        console.warn('Cannot start music: WebSocket not connected or session not ready');
-        // Pause the video if not connected
-        if (youtubePlayerRef.current) {
+    // Auto-play when player is ready - WebSocket connects AFTER video starts
+    if (!hasAutoPlayedRef.current) {
+      console.log('🚀 Attempting auto-play - player ready');
+      setTimeout(() => {
+        if (youtubePlayerRef.current && !hasAutoPlayedRef.current) {
           try {
-            youtubePlayerRef.current.pauseVideo();
-          } catch (e) {
-            // Ignore pause errors
+            youtubePlayerRef.current.playVideo();
+            hasAutoPlayedRef.current = true;
+            console.log('✅ Auto-played YouTube video');
+            
+            // Connect WebSocket AFTER video starts playing (music will auto-start when session ID arrives)
+            setTimeout(() => {
+              if (!isUnmountingRef.current && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
+                console.log('🔌 Connecting WebSocket after video started...');
+                connectWebSocket();
+              }
+            }, 1000); // Connect 1 second after video starts
+          } catch (error) {
+            console.error('❌ Auto-play error:', error);
           }
         }
-      }
-    } else if (state === 2) { // PAUSED
-      // User pressed pause on YouTube - stop music generation
-      // Only stop if we're actually generating
-      if (isGenerating && sessionId) {
-        handleStop().catch((error) => {
-          console.error('Failed to stop music generation:', error);
-        });
-      }
-    } else if (state === 5) { // CUED
-      // Video is ready - this happens after seeks, we don't need to do anything
+      }, 800); // Longer delay to ensure player is fully ready
     }
-  }, [isGenerating, isConnected, sessionId, handleStart, handleStop]);
+  }, [connectWebSocket]);
+  
+  // Handle YouTube player state changes - disabled (no auto-start from YouTube controls)
+  const handleYouTubeStateChange = useCallback((event: any) => {
+    // YouTube controls are disabled, so this should only fire from programmatic changes
+    const state = event.data;
+    console.log('📺 YouTube state changed (programmatic):', { 
+      state, 
+      stateName: state === 1 ? 'PLAYING' : state === 2 ? 'PAUSED' : state === 5 ? 'CUED' : state
+    });
+  }, []);
 
-  // Handle YouTube player seek (debounced)
+  // Scrubbing removed - no-op handler
   const handleYouTubeSeek = useCallback((seconds: number) => {
-    if (stream?.isLive || !sessionId || !wsRef.current) {
-      return; // Don't seek on live streams
-    }
+    // Scrubbing integration removed
+  }, []);
 
-    // Ignore seeks during initial playback (first play)
-    if (!hasStartedPlayingRef.current) {
-      console.log(`Ignoring seek to ${seconds}s - playback not started yet`);
-      return;
-    }
-
-    // Ignore ALL seeks in first 10 seconds of playback to prevent resets
-    const timeSinceStart = hasStartedPlayingRef.current 
-      ? Date.now() - hasStartedPlayingRef.current 
-      : Infinity;
-    if (timeSinceStart < 10000) {
-      console.log(`🚫 BLOCKING seek to ${seconds}s - too early in playback (${timeSinceStart}ms)`);
-      return;
-    }
-
-    // Ignore if we're already processing a seek
-    if (isSeekingRef.current) {
-      return;
-    }
-
-    if (seekDebounceRef.current) {
-      clearTimeout(seekDebounceRef.current);
-    }
-
-    seekDebounceRef.current = setTimeout(() => {
-      if (!isSeekingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-        isSeekingRef.current = true;
-        try {
-          wsRef.current.send(JSON.stringify({
-            type: 'seek',
-            offset: seconds
-          }));
-          console.log(`🎯 Seeking to ${seconds}s`);
-        } catch (error) {
-          console.error('Error sending seek:', error);
-          isSeekingRef.current = false;
-        }
-        // Reset flag after a delay
-        setTimeout(() => {
-          isSeekingRef.current = false;
-        }, 2000);
-      }
-    }, 800); // 800ms debounce to avoid conflicts with YouTube's native seek
-  }, [sessionId, stream?.isLive]);
-
-  const handleSeek = () => {
-    const offset = parseFloat(seekSeconds);
-    if (isNaN(offset) || offset < 0 || !sessionId || !wsRef.current) {
-      return;
-    }
-
-    // Programmatically seek YouTube player
-    if (youtubePlayerRef.current) {
-      try {
-        youtubePlayerRef.current.seekTo(offset, true);
-      } catch (e) {
-        console.error('Error seeking YouTube player:', e);
-      }
-    }
-
-    // Also send to backend
-    try {
-      wsRef.current.send(JSON.stringify({
-        type: 'seek',
-        offset: offset
-      }));
-      setSeekSeconds("");
-    } catch (error) {
-      console.error('Error sending seek:', error);
-    }
-  };
-
+  // Format bytes to match index.html (always in KB)
   const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes.toFixed(1)} KB`;
-    return `${(bytes / 1024).toFixed(2)} MB`;
+    // Match index.html: always show in KB
+    return `${(bytes / 1024).toFixed(1)} KB`;
   };
 
   return (
@@ -802,7 +858,6 @@ export default function StreamPage() {
                         isLive={stream.isLive}
                         onReady={handleYouTubeReady}
                         onStateChange={handleYouTubeStateChange}
-                        onSeek={handleYouTubeSeek}
                       />
                       {/* Loading overlay when connecting */}
                       {isConnecting && (
@@ -861,6 +916,28 @@ export default function StreamPage() {
               <CardContent className="p-3">
                 <div className="grid grid-cols-2 gap-1.5">
                   <Button
+                    onClick={handlePlay}
+                    disabled={!isConnected || !sessionId || isGenerating}
+                    size="sm"
+                    className="h-8 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:opacity-50 text-xs px-2"
+                    title="Play"
+                  >
+                    <Play className="mr-1 h-3.5 w-3.5" />
+                    Play
+                  </Button>
+                  <Button
+                    onClick={handlePause}
+                    disabled={!isConnected || !sessionId}
+                    size="sm"
+                    className="h-8 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:opacity-50 text-xs px-2"
+                    title="Pause"
+                  >
+                    <Pause className="mr-1 h-3.5 w-3.5" />
+                    Pause
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                  <Button
                     onClick={connectWebSocket}
                     disabled={isConnected}
                     size="sm"
@@ -882,9 +959,6 @@ export default function StreamPage() {
                     Download
                   </Button>
                 </div>
-                <p className="mt-2 text-[10px] text-gray-500 text-center">
-                  Use YouTube controls to play/pause
-                </p>
               </CardContent>
             </Card>
 
@@ -911,37 +985,6 @@ export default function StreamPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* Video Scrubbing - Compact */}
-            <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
-              <CardHeader className="pb-1 px-3 pt-3">
-                <div className="flex items-center gap-1.5">
-                  <Target className="h-3 w-3 text-red-500" />
-                  <CardDescription className="text-[10px] font-medium">Test Scrubbing</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0 px-3 pb-3">
-                <div className="flex gap-1.5">
-                  <Input
-                    type="number"
-                    value={seekSeconds}
-                    onChange={(e) => setSeekSeconds(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSeek()}
-                    placeholder="120"
-                    className="h-7 text-xs border-gray-300 dark:border-gray-700"
-                  />
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    className="h-7 border-gray-300 dark:border-gray-700 px-2"
-                    onClick={handleSeek}
-                    disabled={!isConnected || !sessionId}
-                  >
-                    <span className="text-xs">Seek</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Stream Details - Compact */}
             <Card className="border-purple-700/50 bg-white/95 dark:bg-gray-900/95">
