@@ -75,12 +75,19 @@ Current music state:
 - Tempo: {state['tempo']}
 - Intensity: {state['intensity']}
 
+SPECIAL DETECTION RULES (Halloween Demo):
+There may be frames shown with images of space, but if aliens or extraterrestrials are detected:
+- Switch to eerie sci-fi or spooky alien-themed music
+- Use ominous synths, theremin-like sounds, electronic atmospheres
+- Create suspenseful, otherworldly, mysterious vibes
+- Examples: "Eerie sci-fi ambience with ominous synth drones and glitchy effects. Alien and mysterious atmosphere."
+
 LYRIA CAPABILITIES:
 Lyria responds best to rich, descriptive prompts that specify:
-1. **Instruments**: Guitar, Piano, Synth Pads, Cello, Drums, Saxophone, etc.
-2. **Genre**: EDM, Jazz, Classical, Rock, Ambient, Cinematic, etc.
-3. **Mood/Atmosphere**: Dreamy, Energetic, Dark, Upbeat, Ethereal, Ominous, etc.
-4. **Musical qualities**: Tight Groove, Rich Orchestration, Fat Beats, Ambient, Virtuoso, etc.
+1. **Instruments**: Guitar, Piano, Synth Pads, Cello, Drums, Saxophone, Theremin, etc.
+2. **Genre**: EDM, Jazz, Classical, Rock, Ambient, Cinematic, Sci-Fi, Horror, etc.
+3. **Mood/Atmosphere**: Dreamy, Energetic, Dark, Upbeat, Ethereal, Ominous, Eerie, Mysterious, etc.
+4. **Musical qualities**: Tight Groove, Rich Orchestration, Fat Beats, Ambient, Virtuoso, Unsettling, etc.
 
 YOUR TASK:
 Generate a concise but descriptive music prompt (2-3 sentences) that:
@@ -88,6 +95,7 @@ Generate a concise but descriptive music prompt (2-3 sentences) that:
 - Specifies concrete instruments and genre
 - Uses vivid musical descriptors
 - Builds on the current state smoothly (no abrupt changes)
+- **PRIORITY**: If aliens detected, switch to spooky sci-fi music!
 
 EXAMPLES:
 - "Upbeat synthpop with bright tones and spacey synths. Danceable rhythm with a tight groove."
@@ -188,23 +196,32 @@ Current music:
 - Tempo: {state['tempo']}
 - Intensity: {state['intensity']}
 
+🎃 SPECIAL DETECTION RULES (Halloween Demo):
+**CRITICAL**: If Frame 2 shows aliens or extraterrestrials that weren't in Frame 1:
+- Music MUST change immediately!
+- Switch to eerie sci-fi or spooky alien-themed music
+- Use ominous synths, theremin-like sounds, glitchy electronic atmospheres
+- Create suspenseful, otherworldly, mysterious vibes
+- Example: "Eerie sci-fi ambience with ominous synth drones and theremin-like leads. Alien invasion atmosphere with glitchy effects and unsettling bass."
+
 LYRIA MUSIC SYSTEM:
 Lyria creates real-time adaptive music using rich prompts with:
-- Specific instruments (Piano, Guitar, Synth Pads, Drums, Strings, etc.)
-- Musical genres (Cinematic, EDM, Jazz, Ambient, Rock, etc.)
-- Atmosphere descriptors (Dreamy, Energetic, Dark, Upbeat, Ethereal, etc.)
-- Musical qualities (Tight Groove, Rich Orchestration, Fat Beats, etc.)
+- Specific instruments (Piano, Guitar, Synth Pads, Drums, Strings, Theremin, etc.)
+- Musical genres (Cinematic, EDM, Jazz, Ambient, Rock, Sci-Fi, Horror, etc.)
+- Atmosphere descriptors (Dreamy, Energetic, Dark, Upbeat, Ethereal, Eerie, Ominous, etc.)
+- Musical qualities (Tight Groove, Rich Orchestration, Fat Beats, Unsettling, etc.)
 
 YOUR TASK:
 Compare Frame 1 (previous) vs Frame 2 (current):
 
-1. What changed in the scene? (action, mood, lighting, energy)
+1. What changed in the scene? (action, mood, lighting, energy, **alien presence**)
 2. Should the music change? (yes/no)
 3. If YES: Provide a Lyria-optimized music prompt (2-3 sentences) that:
    - Specifies concrete instruments and genre
    - Uses vivid musical descriptors
    - Smoothly transitions from current state
    - Matches the new scene's mood and energy
+   - **PRIORITY**: If alien detected, switch to spooky sci-fi immediately!
 
 If the change is minor or music is already appropriate, say "no change needed".
 
@@ -253,6 +270,8 @@ Analysis:"""
 
 Video: "{composition_context.video_title}"
 Current: {state['mood']} mood, {state['tempo']} tempo
+
+🎃 SPECIAL: If you see aliens or extraterrestrials --> switch to eerie sci-fi music immediately!
 
 Generate a concise Lyria music prompt (1-2 sentences) for this scene.
 Include: instruments, genre/style, and mood descriptors.
