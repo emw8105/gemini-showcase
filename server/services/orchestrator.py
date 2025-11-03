@@ -86,6 +86,7 @@ class MusicGenerationOrchestrator:
             
             # Create session logger
             session_logger = SessionLogger(session_id)
+            session_logger.log_session_start(video_info, video_url)
             print(f"[Orchestrator] Session log: {session_logger.get_log_path()}")
             
             # Acquire Lyria connection from pool (pre-warmed, instant)
@@ -571,9 +572,18 @@ class MusicGenerationOrchestrator:
         
         session["is_active"] = False
         
-        # Log session end
+        # Calculate session metrics
+        duration = datetime.now().timestamp() - session.get("started_at", 0)
+        frames_analyzed = session.get("frame_index", 0)
+        user_prompts = len(session.get("composition_context").user_prompts) if session.get("composition_context") else 0
+        
+        # Log session end with metrics
         if "session_logger" in session:
-            session["session_logger"].log_session_end()
+            session["session_logger"].log_session_end({
+                "duration": duration,
+                "frames_analyzed": frames_analyzed,
+                "user_prompts": user_prompts
+            })
         
         # Release Lyria connection back to pool
         await self.lyria_pool.release_connection(session_id)
