@@ -8,13 +8,13 @@ This application analyzes video content in real-time and generates adaptive musi
 
 ### What Makes This Special?
 
-**Livestream Support**: Unlike traditional music generation that works in post-production with unlimited time, this system generates music for **never-before-seen content** as it happens live. Whether it's a Twitch stream, YouTube premiere, or live event, the AI composes original music in real-time, adapting to visual changes as they occur.
+**Livestream Support**: Unlike traditional music generation that works in post-production with unlimited time, this system generates music for **never-before-seen content** as it happens live. Whether it's a YouTube video, premiere event, or livestream, the AI composes original music in real-time, adapting to visual changes as they occur.
 
 **User-Guided Composition**: Viewers can shape the music with natural language prompts like "Add a violin," "Make it sound like Hans Zimmer," or "Switch to EDM." These preferences persist across the entire session, creating a personalized soundtrack experience.
 
 ### Key Features
 
-- **Sub-2-second cold start** using pre-warmed Lyria connections
+- **Sub-4-second cold start** using pre-warmed Lyria connections
 - **Livestream support** for real-time music generation on never-before-seen content
 - **Real-time synchronization** between video playback and music generation
 - **Video scrubbing support** for seamless seeking on recorded content
@@ -64,9 +64,9 @@ This application analyzes video content in real-time and generates adaptive musi
 
 ### yt-dlp Version Requirement
 
-⚠️ **CRITICAL**: Requires `yt-dlp >= 2025.10.22` for reliable YouTube video processing.
+**CRITICAL**: Requires `yt-dlp >= 2025.10.22` for reliable YouTube video processing.
 
-YouTube frequently updates their signature algorithms. Outdated yt-dlp versions will fail with `403 Forbidden` errors.
+YouTube frequently updates its signature algorithms. Outdated yt-dlp versions will fail with `403 Forbidden` errors.
 
 **Symptoms of outdated yt-dlp:**
 - `ERROR: unable to download video data: HTTP Error 403: Forbidden`
@@ -112,7 +112,7 @@ pip install -U yt-dlp
 
 ### Processing Pipeline
 
-1. **Cold Start (<2s)**
+1. **Cold Start (<4s)**
    - Acquire pre-warmed Lyria connection from pool
    - Analyze video metadata (title, description)
    - Start music generation with metadata-based prompt
@@ -371,7 +371,7 @@ When user seeks from 35s → 500s:
 **Receive:**
 - `{"type": "session", "session_id": "..."}`
 - `{"type": "status", "message": "..."}`
-- Binary audio data (raw PCM, 24kHz, mono, 16-bit)
+- Binary audio data (raw PCM, 48kHz, stereo, 16-bit)
 
 ### User Prompts
 
@@ -485,7 +485,7 @@ livestream_interval = 5    # Snapshot interval for live content (seconds)
 pip install -U yt-dlp
 ```
 
-YouTube changes their APIs frequently. Always use the latest yt-dlp.
+YouTube changes its APIs frequently. Always use the latest yt-dlp.
 
 ### Audio Not Playing
 
@@ -570,15 +570,10 @@ Contributions welcome! Please:
 3. Add tests for new functionality
 4. Submit a pull request
 
-## License
-
-MIT License - see LICENSE file for details
-
 ## Acknowledgments
 
 - **Google Gemini** for vision analysis API
 - **Google Lyria** for music generation API
-- **yt-dlp** for reliable YouTube video processing
 
 ---
 
